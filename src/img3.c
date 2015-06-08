@@ -378,6 +378,7 @@ static int img3_get_data(img3_file* image, unsigned char** pdata, unsigned int* 
 	header->signature = image->header->signature;
 	header->data_size = size - sizeof(img3_header);
 	header->image_type = image->header->image_type;
+	header->shsh_offset = 0;
 	offset += sizeof(img3_header);
 
 	// Copy each section over to the new buffer
@@ -419,6 +420,23 @@ int img3_stitch_component(const char* component_name, const unsigned char* compo
 	if (img3 == NULL) {
 		error("ERROR: Unable to parse %s IMG3 file\n", component_name);
 		return -1;
+	}
+
+	int i;
+	for (i = 0; i < img3->num_elements; i++) {
+		if (img3->elements[i]->type == kEcidElement) {
+			info("Seems that %s is already personalized, leaving it alone...\n", component_name);
+			img3_free(img3);
+			outbuf = malloc(component_size);
+			if (!outbuf) {
+				error("ERROR: Unable to allocate memory for IMG3 data\n");
+				return -1;
+			}
+			memcpy(outbuf, component_data, component_size);
+			*img3_data = outbuf;
+			*img3_size = component_size;
+			return 0;
+		}
 	}
 
 	if (((img3_element_header*)blob)->full_size != blob_size) {
