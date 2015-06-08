@@ -40,6 +40,7 @@ extern "C" {
 #define FLAG_NOACTION        1 << 6
 #define FLAG_SHSHONLY        1 << 7
 #define FLAG_LATEST          1 << 8
+#define FLAG_DOWNGRADE       1 << 9
 
 struct idevicerestore_client_t;
 

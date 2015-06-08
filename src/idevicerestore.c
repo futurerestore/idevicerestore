@@ -65,6 +65,7 @@ static struct option longopts[] = {
 	{ "shsh",    no_argument,       NULL, 't' },
 	{ "pwn",     no_argument,       NULL, 'p' },
 	{ "no-action", no_argument,     NULL, 'n' },
+	{ "downgrade", no_argument,     NULL, 'w' },
 	{ "cache-path", required_argument, NULL, 'C' },
 	{ NULL, 0, NULL, 0 }
 };
@@ -92,6 +93,7 @@ void usage(int argc, char* argv[]) {
 	printf("  -p, --pwn\t\tPut device in pwned DFU mode and exit (limera1n devices only)\n");
 	printf("  -n, --no-action\tDo not perform any restore action. If combined with -l option\n");
 	printf("                 \tthe on demand ipsw download is performed before exiting.\n");
+	printf("  -w, --downgrade\tdowngrade with a custom firmware\n");
 	printf("  -C, --cache-path DIR\tUse specified directory for caching extracted\n");
 	printf("                      \tor other reused files.\n");
 	printf("\n");
@@ -193,7 +195,8 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	load_version_data(client);
 
 	// check which mode the device is currently in so we know where to start
-	if (check_mode(client) < 0 || client->mode->index == MODE_UNKNOWN) {
+	if (check_mode(client) < 0 || client->mode->index == MODE_UNKNOWN ||
+	    ((client->flags & FLAG_DOWNGRADE) && client->mode->index != MODE_DFU && client->mode->index != MODE_RECOVERY)) {
 		error("ERROR: Unable to discover device mode. Please make sure a device is attached.\n");
 		return -1;
 	}
@@ -1052,7 +1055,7 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	while ((opt = getopt_long(argc, argv, "dhcesxtpli:u:nC:", longopts, &optindex)) > 0) {
+	while ((opt = getopt_long(argc, argv, "dhcesxtpli:u:nC:w", longopts, &optindex)) > 0) {
 		switch (opt) {
 		case 'h':
 			usage(argc, argv);
@@ -1110,6 +1113,10 @@ int main(int argc, char* argv[]) {
 
 		case 'n':
 			client->flags |= FLAG_NOACTION;
+			break;
+
+		case 'w':
+			client->flags |= FLAG_ERASE | FLAG_DOWNGRADE;
 			break;
 
 		case 'C':
@@ -1368,7 +1375,7 @@ int get_tss_response(struct idevicerestore_client_t* client, plist_t build_ident
 	plist_t response = NULL;
 	*tss = NULL;
 
-	if ((client->build_major <= 8) || (client->flags & FLAG_CUSTOM)) {
+	if ((client->build_major <= 8) || (client->flags & (FLAG_CUSTOM | FLAG_DOWNGRADE))) {
 		error("checking for local shsh\n");
 
 		/* first check for local copy */
@@ -1426,6 +1433,9 @@ int get_tss_response(struct idevicerestore_client_t* client, plist_t build_ident
 	if (*tss) {
 		info("Using cached SHSH\n");
 		return 0;
+	} else if (client->flags & FLAG_DOWNGRADE) {
+		error("Refusing to proceed without saved ticket\n");
+		return -1;
 	} else {
 		info("Trying to fetch new SHSH blob\n");
 	}
