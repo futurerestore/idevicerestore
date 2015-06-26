@@ -1401,18 +1401,6 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 	char* bbfwtmp = NULL;
 	plist_t dict = NULL;
 
-	if (client->flags & FLAG_DOWNGRADE) {
-		plist_t dict = plist_new_dict();
-		restored_error_t restore_error = restored_send(restore, dict);
-		plist_free(dict);
-		if (restore_error != RESTORE_E_SUCCESS) {
-			error("ERROR: During sending BasebandData (%d)\n", restore_error);
-			return -1;
-		}
-		info("Sent empty BasebandData... expect failure\n");
-		return 0;
-	}
-
 	info("About to send BasebandData...\n");
 
 	// NOTE: this function is called 2 or 3 times!
