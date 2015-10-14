@@ -164,9 +164,8 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		}
 	}
 
-	if (recovery_set_autoboot(client, 0) < 0) {
-		return -1;
-	}
+    //no need to set auto-boot false when we want to just boot the device
+	if ((client->flags & FLAG_BOOT) == 0) if (recovery_set_autoboot(client, 0) < 0) return -1;
 
 	info("Recovery Mode Environment:\n");
 	char* value = NULL;
