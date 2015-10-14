@@ -65,8 +65,12 @@ static struct option longopts[] = {
 	{ "shsh",    no_argument,       NULL, 't' },
 	{ "pwn",     no_argument,       NULL, 'p' },
 	{ "no-action", no_argument,     NULL, 'n' },
-	{ "downgrade", no_argument,     NULL, 'w' },
-	{ "cache-path", required_argument, NULL, 'C' },
+    { "downgrade", no_argument,     NULL, 'w' },
+    { "cache-path", required_argument, NULL, 'C' },
+    { "otamanifest", required_argument, NULL, 'o' },
+    { "boot", no_argument, NULL, 'b' },
+    { "paniclog", no_argument, NULL, 'g' },
+    { "nobootx", no_argument, NULL, 'b' },
 	{ NULL, 0, NULL, 0 }
 };
 #endif
@@ -95,7 +99,12 @@ void usage(int argc, char* argv[]) {
 	printf("                 \tthe on demand ipsw download is performed before exiting.\n");
 	printf("  -w, --downgrade\tdowngrade with a custom firmware\n");
 	printf("  -C, --cache-path DIR\tUse specified directory for caching extracted\n");
-	printf("                      \tor other reused files.\n");
+    printf("                      \tor other reused files.\n");
+    printf("  -o, --otamanifest BuildManifest.plist\tspecify ota BuildManifest to\n");
+    printf("                 \tsign bootfiles with a different apticket\n");
+    printf("  -b, --boot\t\tjust boot tethered\n");
+    printf("      --nobootx\t\tdoes not run \"bootx\" command\n");
+    printf("  -g, --paniclog\tboot restore ramdisk, print paniclog (if available) and reboot\n");
 	printf("\n");
 }
 
@@ -555,6 +564,25 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			valid_builds++;
 		}
 	}
+    
+    plist_t buildmanifest2 = NULL;
+    plist_t build_identity2 = NULL;
+    if (client->flags & FLAG_OTAMANIFEST) {
+        FILE *ofp = fopen(client->otamanifest,"rb");
+        struct stat *ostat = (struct stat *) malloc(sizeof(struct stat));
+        stat(client->otamanifest, ostat);
+        char *opl = (char *)malloc(sizeof(char) *(ostat->st_size +1));
+        fread(opl, sizeof(char), ostat->st_size, ofp);
+        fclose(ofp);
+        
+        if (memcmp(opl, "bplist00", 8) == 0)
+            plist_from_bin(opl, ostat->st_size, &buildmanifest2);
+        else
+            plist_from_xml(opl, ostat->st_size, &buildmanifest2);
+        free(ostat);
+        build_identity2 = build_manifest_get_build_identity(buildmanifest2, 0);
+        free(opl);
+    }
 
 	/* print information about current build identity */
 	build_identity_print_information(build_identity);
@@ -591,7 +619,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			}
 		}
 
-		if (get_tss_response(client, build_identity, &client->tss) < 0) {
+        if ((client->flags & FLAG_OTAMANIFEST ? get_tss_response(client, build_identity2, &client->tss) : get_tss_response(client, build_identity, &client->tss)) < 0) {
 			error("ERROR: Unable to get SHSH blobs for this device\n");
 			return -1;
 		}
@@ -849,12 +877,13 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		if (nonce_changed && !(client->flags & FLAG_CUSTOM)) {
 			// Welcome iOS5. We have to re-request the TSS with our nonce.
 			plist_free(client->tss);
-			if (get_tss_response(client, build_identity, &client->tss) < 0) {
-				error("ERROR: Unable to get SHSH blobs for this device\n");
-				if (delete_fs && filesystem)
-					unlink(filesystem);
-				return -1;
-			}
+            if ((client->flags & FLAG_OTAMANIFEST ? get_tss_response(client, build_identity2, &client->tss) : get_tss_response(client, build_identity, &client->tss)) < 0) {
+                error("ERROR: Unable to get SHSH blobs for this device\n");
+                if (delete_fs && filesystem)
+                    unlink(filesystem);
+                return -1;
+            }
+
 			if (!client->tss) {
 				error("ERROR: can't continue without TSS\n");
 				if (delete_fs && filesystem)
@@ -1055,7 +1084,7 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	while ((opt = getopt_long(argc, argv, "dhcesxtpli:u:nC:w", longopts, &optindex)) > 0) {
+	while ((opt = getopt_long(argc, argv, "dhcesxtplibgo:u:nC:w", longopts, &optindex)) > 0) {
 		switch (opt) {
 		case 'h':
 			usage(argc, argv);
@@ -1122,8 +1151,21 @@ int main(int argc, char* argv[]) {
 		case 'C':
 			client->cache_dir = strdup(optarg);
 			break;
-
-		default:
+            
+        case 'o':
+            client->flags |= FLAG_OTAMANIFEST;
+            client->otamanifest = strdup(optarg);
+            break;
+            
+        case 'b':
+            client->flags |= (strncmp(argv[optind-1],"--nobootx",strlen("--nobootx")) == 0) ? FLAG_NOBOOTX : FLAG_BOOT;
+            break;
+        
+        case 'g':
+            client->flags |= FLAG_PANICLOG;
+            break;
+        
+        default:
 			usage(argc, argv);
 			return -1;
 		}

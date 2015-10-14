@@ -71,6 +71,7 @@ struct idevicerestore_entry_t {
 
 struct idevicerestore_client_t {
 	int flags;
+    char *otamanifest;
 	plist_t tss;
 	char* tss_url;
 	plist_t version_data;

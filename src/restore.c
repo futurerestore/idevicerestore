@@ -1701,6 +1701,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	}
 
 	restore_error = restored_query_value(restore, "SavedDebugInfo", &hwinfo);
+    node = NULL;
 	if (restore_error == RESTORE_E_SUCCESS) {
 		char* sval = NULL;
 
@@ -1730,6 +1731,14 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		plist_free(hwinfo);
 	}
 
+    if (client->flags & FLAG_PANICLOG) {
+        if (!node) {
+            info("No paniclog available\n");
+        }
+        restore_reboot(client);
+        return 0;
+    }
+    
 	if (plist_dict_get_item(client->tss, "BBTicket")) {
 		client->restore->bbtss = plist_copy(client->tss);
 	}

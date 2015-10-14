@@ -142,7 +142,7 @@ int recovery_set_autoboot(struct idevicerestore_client_t* client, int enable) {
 }
 
 int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build_identity) {
-	if (client->build_major >= 8) {
+    if (client->build_major >= 8) {
 		client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress");
 	}
 
@@ -204,25 +204,26 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		error("ERROR: Unable to send AppleLogo\n");
 		return -1;
 	}
-
-	/* send ramdisk and run it */
-	if (recovery_send_ramdisk(client, build_identity) < 0) {
-		error("ERROR: Unable to send Ramdisk\n");
-		return -1;
-	}
-
+    if ((client->flags & FLAG_BOOT) == 0) {
+        /* send ramdisk and run it */
+        if (recovery_send_ramdisk(client, build_identity) < 0) {
+            error("ERROR: Unable to send Ramdisk\n");
+            return -1;
+        }
+    }
+    
 	/* send devicetree and load it */
 	if (recovery_send_devicetree(client, build_identity) < 0) {
 		error("ERROR: Unable to send DeviceTree\n");
 		return -1;
 	}
-
+    
 	if (recovery_send_kernelcache(client, build_identity) < 0) {
 		error("ERROR: Unable to send KernelCache\n");
 		return -1;
 	}
 
-	client->mode = &idevicerestore_modes[MODE_RESTORE];
+	if ((client->flags & FLAG_BOOT) == 0 && (client->flags & FLAG_NOBOOTX) == 0) client->mode = &idevicerestore_modes[MODE_RESTORE];
 	return 0;
 }
 
@@ -446,8 +447,10 @@ int recovery_send_kernelcache(struct idevicerestore_client_t* client, plist_t bu
 		recovery_error = irecv_send_command(client->recovery->client, setba);
 	}
 
-	recovery_error = irecv_send_command(client->recovery->client, "bootx");
-	if (recovery_error != IRECV_E_SUCCESS) {
+    if ((client->flags & FLAG_NOBOOTX) == 0) recovery_error = irecv_send_command(client->recovery->client, "bootx");
+    else info("Flag nobootx detected! Not executing \"bootx\", but device is ready\n");
+    
+    if (recovery_error != IRECV_E_SUCCESS) {
 		error("ERROR: Unable to execute %s\n", component);
 		return -1;
 	}

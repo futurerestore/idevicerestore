@@ -41,6 +41,10 @@ extern "C" {
 #define FLAG_SHSHONLY        1 << 7
 #define FLAG_LATEST          1 << 8
 #define FLAG_DOWNGRADE       1 << 9
+#define FLAG_OTAMANIFEST     1 << 10
+#define FLAG_BOOT            1 << 11
+#define FLAG_PANICLOG        1 << 12
+#define FLAG_NOBOOTX         1 << 13
 
 struct idevicerestore_client_t;
 
