@@ -1,7 +1,11 @@
-dnl Process this file with autoconf to produce a configure script.
+#                                               -*- Autoconf -*-
+# Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.61)
-AC_INIT(idevicerestore, 1.0)
+AC_PREREQ(2.64)
+AC_INIT([idevicerestore], [1.0], [https://github.com/libimobiledevice/idevicerestore/issues],, [http://libimobiledevice.org])
+
+AC_CANONICAL_SYSTEM
+AM_INIT_AUTOMAKE([dist-bzip2 no-dist-gzip])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES])
 
@@ -9,19 +13,34 @@ AC_CONFIG_SRCDIR([src/])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
-AC_CANONICAL_SYSTEM
-AM_INIT_AUTOMAKE()
 
+# Minimum package versions
+LIBIRECOVERY_VERSION=0.2.0
+LIBIMOBILEDEVICE_VERSION=1.1.6
+LIBPLIST_VERSION=1.12
+LIBZIP_VERSION=0.8
+LIBCURL_VERSION=7.0
+OPENSSL_VERSION=0.9.8
+
+AC_SUBST(LIBIRECOVERY_VERSION)
+AC_SUBST(LIBIMOBILEDEVICE_VERSION)
+AC_SUBST(LIBPLIST_VERSION)
+AC_SUBST(LIBZIP_VERSION)
+AC_SUBST(LIBCURL_VERSION)
+AC_SUBST(OPENSSL_VERSION)
+
+# Checks for programs.
 AC_PROG_CC
 AM_PROG_CC_C_O
 AC_PROG_LIBTOOL
 
-PKG_CHECK_MODULES(libirecovery, libirecovery >= 0.2.0)
-PKG_CHECK_MODULES(libimobiledevice, libimobiledevice-1.0 >= 1.1.6)
-PKG_CHECK_MODULES(libplist, libplist >= 1.11)
-PKG_CHECK_MODULES(libzip, libzip >= 0.8)
-PKG_CHECK_MODULES(libcurl, libcurl >= 7.0)
-PKG_CHECK_MODULES(openssl, openssl >= 0.9.8)
+# Checks for libraries.
+PKG_CHECK_MODULES(libirecovery, libirecovery >= $LIBIRECOVERY_VERSION)
+PKG_CHECK_MODULES(libimobiledevice, libimobiledevice-1.0 >= $LIBIMOBILEDEVICE_VERSION)
+PKG_CHECK_MODULES(libplist, libplist >= $LIBPLIST_VERSION)
+PKG_CHECK_MODULES(libzip, libzip >= $LIBZIP_VERSION)
+PKG_CHECK_MODULES(libcurl, libcurl >= $LIBCURL_VERSION)
+PKG_CHECK_MODULES(openssl, openssl >= $OPENSSL_VERSION)
 
 GLOBAL_CFLAGS=""
 AC_LDADD=""

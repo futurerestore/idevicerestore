@@ -2,8 +2,8 @@
  * idevicerestore.c
  * Restore device firmware and filesystem
  *
- * Copyright (c) 2010-2013 Martin Szulecki. All Rights Reserved.
- * Copyright (c) 2012-2013 Nikias Bassen. All Rights Reserved.
+ * Copyright (c) 2010-2015 Martin Szulecki. All Rights Reserved.
+ * Copyright (c) 2012-2015 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -20,6 +20,10 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,6 +110,7 @@ void usage(int argc, char* argv[]) {
     printf("      --nobootx\t\tdoes not run \"bootx\" command\n");
     printf("  -g, --paniclog\tboot restore ramdisk, print paniclog (if available) and reboot\n");
 	printf("\n");
+	printf("Homepage: <" PACKAGE_URL ">\n");
 }
 
 static int load_version_data(struct idevicerestore_client_t* client)
@@ -287,12 +292,12 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	}
 
 	// discover the device type
-	if (check_product_type(client) == NULL || client->device == NULL) {
-		error("ERROR: Unable to discover device type\n");
+	if (check_hardware_model(client) == NULL || client->device == NULL) {
+		error("ERROR: Unable to discover device model\n");
 		return -1;
 	}
 	idevicerestore_progress(client, RESTORE_STEP_DETECT, 0.2);
-	info("Identified device as %s\n", client->device->product_type);
+	info("Identified device as %s, %s\n", client->device->hardware_model, client->device->product_type);
 
 	if ((client->flags & FLAG_PWN) && (client->mode->index != MODE_DFU)) {
 		error("ERROR: you need to put your device into DFU mode to pwn it.\n");
@@ -547,21 +552,16 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			plist_dict_set_item(build_identity, "Manifest", manifest);
 		}
 	} else if (client->flags & FLAG_ERASE) {
-		build_identity = build_manifest_get_build_identity(buildmanifest, 0);
+		build_identity = build_manifest_get_build_identity_for_model_with_restore_behavior(buildmanifest, client->device->hardware_model, "Erase");
 		if (build_identity == NULL) {
 			error("ERROR: Unable to find any build identities\n");
 			plist_free(buildmanifest);
 			return -1;
 		}
 	} else {
-		// loop through all build identities in the build manifest
-		// and list the valid ones
-		int i = 0;
-		int valid_builds = 0;
-		int build_count = build_manifest_get_identity_count(buildmanifest);
-		for (i = 0; i < build_count; i++) {
-			build_identity = build_manifest_get_build_identity(buildmanifest, i);
-			valid_builds++;
+		build_identity = build_manifest_get_build_identity_for_model_with_restore_behavior(buildmanifest, client->device->hardware_model, "Update");
+		if (!build_identity) {
+			build_identity = build_manifest_get_build_identity_for_model(buildmanifest, client->device->hardware_model);
 		}
 	}
     
@@ -601,14 +601,12 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		if (client->build_major > 8) {
 			unsigned char* nonce = NULL;
 			int nonce_size = 0;
-			int nonce_changed = 0;
 			if (get_ap_nonce(client, &nonce, &nonce_size) < 0) {
 				/* the first nonce request with older firmware releases can fail and it's OK */
 				info("NOTE: Unable to get nonce from device\n");
 			}
 
 			if (!client->nonce || (nonce_size != client->nonce_size) || (memcmp(nonce, client->nonce, nonce_size) != 0)) {
-				nonce_changed = 1;
 				if (client->nonce) {
 					free(client->nonce);
 				}
@@ -960,7 +958,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	return result;
 }
 
-struct idevicerestore_client_t* idevicerestore_client_new()
+struct idevicerestore_client_t* idevicerestore_client_new(void)
 {
 	struct idevicerestore_client_t* client = (struct idevicerestore_client_t*) malloc(sizeof(struct idevicerestore_client_t));
 	if (client == NULL) {
@@ -1226,31 +1224,31 @@ int check_mode(struct idevicerestore_client_t* client) {
 	return mode;
 }
 
-const char* check_product_type(struct idevicerestore_client_t* client) {
-	const char* product_type = NULL;
+const char* check_hardware_model(struct idevicerestore_client_t* client) {
+	const char* hw_model = NULL;
 
 	switch (client->mode->index) {
 	case MODE_RESTORE:
-		product_type = restore_check_product_type(client);
+		hw_model = restore_check_hardware_model(client);
 		break;
 
 	case MODE_NORMAL:
-		product_type = normal_check_product_type(client);
+		hw_model = normal_check_hardware_model(client);
 		break;
 
 	case MODE_DFU:
 	case MODE_RECOVERY:
-		product_type = dfu_check_product_type(client);
+		hw_model = dfu_check_hardware_model(client);
 		break;
 	default:
 		break;
 	}
 
-	if (product_type != NULL) {
-		irecv_devices_get_device_by_product_type(product_type, &client->device);
+	if (hw_model != NULL) {
+		irecv_devices_get_device_by_hardware_model(hw_model, &client->device);
 	}
 
-	return product_type;
+	return hw_model;
 }
 
 int is_image4_supported(struct idevicerestore_client_t* client)
@@ -1410,6 +1408,63 @@ plist_t build_manifest_get_build_identity(plist_t build_manifest, uint32_t ident
 	}
 
 	return plist_copy(build_identity);
+}
+
+plist_t build_manifest_get_build_identity_for_model_with_restore_behavior(plist_t build_manifest, const char *hardware_model, const char *behavior)
+{
+	plist_t build_identities_array = plist_dict_get_item(build_manifest, "BuildIdentities");
+	if (!build_identities_array || plist_get_node_type(build_identities_array) != PLIST_ARRAY) {
+		error("ERROR: Unable to find build identities node\n");
+		return NULL;
+	}
+
+	uint32_t i;
+	for (i = 0; i < plist_array_get_size(build_identities_array); i++) {
+		plist_t ident = plist_array_get_item(build_identities_array, i);
+		if (!ident || plist_get_node_type(ident) != PLIST_DICT) {
+			continue;
+		}
+		plist_t info_dict = plist_dict_get_item(ident, "Info");
+		if (!info_dict || plist_get_node_type(ident) != PLIST_DICT) {
+			continue;
+		}
+		plist_t devclass = plist_dict_get_item(info_dict, "DeviceClass");
+		if (!devclass || plist_get_node_type(devclass) != PLIST_STRING) {
+			continue;
+		}
+		char *str = NULL;
+		plist_get_string_val(devclass, &str);
+		if (strcasecmp(str, hardware_model) != 0) {
+			free(str);
+			continue;
+		}
+		free(str);
+		str = NULL;
+		if (behavior) {
+			plist_t rbehavior = plist_dict_get_item(info_dict, "RestoreBehavior");
+			if (!rbehavior || plist_get_node_type(rbehavior) != PLIST_STRING) {
+				continue;
+			}
+			plist_get_string_val(rbehavior, &str);
+			if (strcasecmp(str, behavior) != 0) {
+				free(str);
+				continue;
+			} else {
+				free(str);
+				return plist_copy(ident);
+			}
+			free(str);
+		} else {
+			return plist_copy(ident);
+		}
+	}
+
+	return NULL;
+}
+
+plist_t build_manifest_get_build_identity_for_model(plist_t build_manifest, const char *hardware_model)
+{
+	return build_manifest_get_build_identity_for_model_with_restore_behavior(build_manifest, hardware_model, NULL);
 }
 
 int get_tss_response(struct idevicerestore_client_t* client, plist_t build_identity, plist_t* tss) {

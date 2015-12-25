@@ -32,6 +32,15 @@
 
 #define MAX_PRINT_LEN 64*1024
 
+struct idevicerestore_mode_t idevicerestore_modes[] = {
+	{  0, "WTF"      },
+	{  1, "DFU"      },
+	{  2, "Recovery" },
+	{  3, "Restore"  },
+	{  4, "Normal"   },
+	{ -1,  NULL      }
+};
+
 int idevicerestore_debug = 0;
 
 #define idevicerestore_err_buff_size 256
@@ -109,7 +118,7 @@ void idevicerestore_set_debug_stream(FILE* strm)
 	}
 }
 
-const char* idevicerestore_get_error()
+const char* idevicerestore_get_error(void)
 {
 	if (idevicerestore_err_buff[0] == 0) {
 		return NULL;
@@ -214,7 +223,7 @@ void print_progress_bar(double progress) {
 
 #define GET_RAND(min, max) ((rand() % (max - min)) + min)
 
-char *generate_guid()
+char *generate_guid(void)
 {
 	char *guid = (char *) malloc(sizeof(char) * 37);
 	const char *chars = "ABCDEF0123456789";
@@ -272,30 +281,4 @@ void idevicerestore_progress(struct idevicerestore_client_t* client, int step, d
 			print_progress_bar(100.0f * progress);
 		}
 	}
-}
-
-void plist_dict_merge(plist_t* dictionary, plist_t node)
-{
-	if (dictionary == NULL || (plist_get_node_type(*dictionary) != PLIST_DICT))
-		return;
-
-	char* key = NULL;
-	plist_dict_iter it = NULL;
-	plist_t subnode = NULL;
-	plist_dict_new_iter(node, &it);
-	plist_dict_next_item(node, it, &key, &subnode);
-
-	while (subnode)
-	{
-		if (plist_dict_get_item(*dictionary, key) != NULL)
-			plist_dict_remove_item(*dictionary, key);
-
-		plist_dict_set_item(*dictionary, key, plist_copy(subnode));
-		if (key) {
-			free(key);
-			key = NULL;
-		}
-		plist_dict_next_item(node, it, &key, &subnode);
-	}
-	free(it);
 }

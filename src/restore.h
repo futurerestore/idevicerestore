@@ -3,7 +3,7 @@
  * Functions for handling idevices in restore mode
  *
  * Copyright (c) 2010-2012 Martin Szulecki. All Rights Reserved.
- * Copyright (c) 2012 Nikias Bassen. All Rights Reserved.
+ * Copyright (c) 2012-2015 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -44,7 +44,7 @@ struct restore_client_t {
 };
 
 int restore_check_mode(struct idevicerestore_client_t* client);
-const char* restore_check_product_type(struct idevicerestore_client_t* client);
+const char* restore_check_hardware_model(struct idevicerestore_client_t* client);
 int restore_client_new(struct idevicerestore_client_t* client);
 void restore_client_free(struct idevicerestore_client_t* client);
 int restore_reboot(struct idevicerestore_client_t* client);
@@ -58,7 +58,7 @@ int restore_send_kernelcache(restored_client_t restore, struct idevicerestore_cl
 int restore_device(struct idevicerestore_client_t* client, plist_t build_identity, const char* filesystem);
 int restore_open_with_timeout(struct idevicerestore_client_t* client);
 int restore_send_filesystem(struct idevicerestore_client_t* client, idevice_t device, const char* filesystem);
-
+int restore_send_fdr_trust_data(restored_client_t restore, idevice_t device);
 
 #ifdef __cplusplus
 }

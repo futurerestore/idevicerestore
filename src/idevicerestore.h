@@ -3,7 +3,7 @@
  * Restore device firmware and filesystem
  *
  * Copyright (c) 2010-2012 Martin Szulecki. All Rights Reserved.
- * Copyright (c) 2012 Nikias Bassen. All Rights Reserved.
+ * Copyright (c) 2012-2015 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -60,7 +60,7 @@ enum {
 
 typedef void (*idevicerestore_progress_cb_t)(int step, double step_progress, void* userdata);
 
-struct idevicerestore_client_t* idevicerestore_client_new();
+struct idevicerestore_client_t* idevicerestore_client_new(void);
 void idevicerestore_client_free(struct idevicerestore_client_t* client);
 
 void idevicerestore_set_ecid(struct idevicerestore_client_t* client, unsigned long long ecid);
@@ -74,11 +74,11 @@ void idevicerestore_set_error_stream(FILE* strm);
 void idevicerestore_set_debug_stream(FILE* strm);
 
 int idevicerestore_start(struct idevicerestore_client_t* client);
-const char* idevicerestore_get_error();
+const char* idevicerestore_get_error(void);
 
 void usage(int argc, char* argv[]);
 int check_mode(struct idevicerestore_client_t* client);
-const char* check_product_type(struct idevicerestore_client_t* client);
+const char* check_hardware_model(struct idevicerestore_client_t* client);
 int get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid);
 int is_image4_supported(struct idevicerestore_client_t* client);
 int get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size);
@@ -89,6 +89,8 @@ int build_manifest_get_identity_count(plist_t build_manifest);
 int build_manifest_check_compatibility(plist_t build_manifest, const char* product);
 void build_manifest_get_version_information(plist_t build_manifest, struct idevicerestore_client_t* client);
 plist_t build_manifest_get_build_identity(plist_t build_manifest, uint32_t identity);
+plist_t build_manifest_get_build_identity_for_model(plist_t build_manifest, const char *hardware_model);
+plist_t build_manifest_get_build_identity_for_model_with_restore_behavior(plist_t build_manifest, const char *hardware_model, const char *behavior);
 int build_manifest_get_build_count(plist_t build_manifest);
 void build_identity_print_information(plist_t build_identity);
 int build_identity_has_component(plist_t build_identity, const char* component);

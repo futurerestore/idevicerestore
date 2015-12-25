@@ -2,7 +2,7 @@
  * normal.h
  * Functions for handling idevices in normal mode
  *
- * Copyright (c) 2012-2013 Nikias Bassen. All Rights Reserved.
+ * Copyright (c) 2012-2015 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2012 Martin Szulecki. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
@@ -85,13 +85,25 @@ static int normal_idevice_new(struct idevicerestore_client_t* client, idevice_t*
 {
 	int num_devices = 0;
 	char **devices = NULL;
+	idevice_t dev = NULL;
+	idevice_error_t device_error;
+
+	*device = NULL;
+
+	if (client->udid) {
+		device_error = idevice_new(&dev, client->udid);
+		if (device_error != IDEVICE_E_SUCCESS) {
+			error("ERROR: %s: can't open device with UDID %s\n", __func__, client->udid);
+			return -1;
+		}
+		*device = dev;
+		return 0;
+	}
+
 	idevice_get_device_list(&devices, &num_devices);
 	if (num_devices == 0) {
 		return -1;
 	}
-	*device = NULL;
-	idevice_t dev = NULL;
-	idevice_error_t device_error;
 	lockdownd_client_t lockdown = NULL;
 	int j;
 	for (j = 0; j < num_devices; j++) {
@@ -124,28 +136,26 @@ static int normal_idevice_new(struct idevicerestore_client_t* client, idevice_t*
 		}
 		free(type);
 
-		if (client->ecid != 0) {
-			plist_t node = NULL;
-			if ((lockdownd_get_value(lockdown, NULL, "UniqueChipID", &node) != LOCKDOWN_E_SUCCESS) || !node || (plist_get_node_type(node) != PLIST_UINT)){
-				if (node) {
-					plist_free(node);
-				}
-				continue;
+		plist_t node = NULL;
+		if ((lockdownd_get_value(lockdown, NULL, "UniqueChipID", &node) != LOCKDOWN_E_SUCCESS) || !node || (plist_get_node_type(node) != PLIST_UINT)){
+			if (node) {
+				plist_free(node);
 			}
-			lockdownd_client_free(lockdown);
-			lockdown = NULL;
+			continue;
+		}
+		lockdownd_client_free(lockdown);
+		lockdown = NULL;
 
-			uint64_t this_ecid = 0;
-			plist_get_uint_val(node, &this_ecid);
-			plist_free(node);
+		uint64_t this_ecid = 0;
+		plist_get_uint_val(node, &this_ecid);
+		plist_free(node);
 
+		if (client->ecid != 0) {
 			if (this_ecid != client->ecid) {
 				continue;
 			}
-		}
-		if (lockdown) {
-			lockdownd_client_free(lockdown);
-			lockdown = NULL;
+		} else {
+			client->ecid = this_ecid;
 		}
 		client->udid = strdup(devices[j]);
 		*device = dev;
@@ -208,13 +218,13 @@ int normal_open_with_timeout(struct idevicerestore_client_t* client) {
 	return 0;
 }
 
-const char* normal_check_product_type(struct idevicerestore_client_t* client) {
+const char* normal_check_hardware_model(struct idevicerestore_client_t* client) {
 	idevice_t device = NULL;
 	char* product_type = NULL;
 	irecv_device_t irecv_device = NULL;
 	plist_t product_type_node = NULL;
 	lockdownd_client_t lockdown = NULL;
-	lockdownd_error_t lockdown_error = IDEVICE_E_SUCCESS;
+	lockdownd_error_t lockdown_error = LOCKDOWN_E_SUCCESS;
 
 	normal_idevice_new(client, &device);
 	if (!device) {
@@ -237,9 +247,6 @@ const char* normal_check_product_type(struct idevicerestore_client_t* client) {
 		plist_get_string_val(pval, &strval);
 		if (strval) {
 			irecv_devices_get_device_by_hardware_model(strval, &irecv_device);
-			if (irecv_device) {
-				product_type = strdup(irecv_device->product_type);
-			}
 			free(strval);
 		}
 	}
@@ -247,44 +254,7 @@ const char* normal_check_product_type(struct idevicerestore_client_t* client) {
 		plist_free(pval);
 	}
 
-	if (product_type == NULL) {
-		lockdown_error = lockdownd_get_value(lockdown, NULL, "ProductType", &product_type_node);
-		if (lockdown_error != LOCKDOWN_E_SUCCESS) {
-			lockdownd_client_free(lockdown);
-			idevice_free(device);
-			return product_type;
-		}
-	}
-
-	lockdownd_client_free(lockdown);
-	idevice_free(device);
-	lockdown = NULL;
-	device = NULL;
-
-	if (irecv_device) {
-		if (product_type)
-			free(product_type);
-
-		return irecv_device->product_type;
-	}
-
-	if (product_type_node != NULL) {
-		if (!product_type_node || plist_get_node_type(product_type_node) != PLIST_STRING) {
-			if (product_type_node)
-				plist_free(product_type_node);
-			return product_type;
-		}
-		plist_get_string_val(product_type_node, &product_type);
-		plist_free(product_type_node);
-
-		irecv_devices_get_device_by_product_type(product_type, &irecv_device);
-		if (irecv_device && irecv_device->product_type) {
-			free(product_type);
-			return irecv_device->product_type;
-		}
-	}
-
-	return product_type;
+	return (irecv_device) ? irecv_device->hardware_model : NULL;
 }
 
 int normal_enter_recovery(struct idevicerestore_client_t* client) {
@@ -333,7 +303,7 @@ static int normal_get_nonce_by_key(struct idevicerestore_client_t* client, const
 	plist_t nonce_node = NULL;
 	lockdownd_client_t lockdown = NULL;
 	idevice_error_t device_error = IDEVICE_E_SUCCESS;
-	lockdownd_error_t lockdown_error = IDEVICE_E_SUCCESS;
+	lockdownd_error_t lockdown_error = LOCKDOWN_E_SUCCESS;
 
 	device_error = idevice_new(&device, client->udid);
 	if (device_error != IDEVICE_E_SUCCESS) {
@@ -389,7 +359,7 @@ int normal_is_image4_supported(struct idevicerestore_client_t* client)
 	plist_t node = NULL;
 	lockdownd_client_t lockdown = NULL;
 	idevice_error_t device_error = IDEVICE_E_SUCCESS;
-	lockdownd_error_t lockdown_error = IDEVICE_E_SUCCESS;
+	lockdownd_error_t lockdown_error = LOCKDOWN_E_SUCCESS;
 
 	device_error = idevice_new(&device, client->udid);
 	if (device_error != IDEVICE_E_SUCCESS) {
@@ -433,7 +403,7 @@ int normal_get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
 	plist_t unique_chip_node = NULL;
 	lockdownd_client_t lockdown = NULL;
 	idevice_error_t device_error = IDEVICE_E_SUCCESS;
-	lockdownd_error_t lockdown_error = IDEVICE_E_SUCCESS;
+	lockdownd_error_t lockdown_error = LOCKDOWN_E_SUCCESS;
 
 	device_error = idevice_new(&device, client->udid);
 	if (device_error != IDEVICE_E_SUCCESS) {
@@ -476,7 +446,7 @@ int normal_get_preflight_info(struct idevicerestore_client_t* client, plist_t *p
 	plist_t node = NULL;
 	lockdownd_client_t lockdown = NULL;
 	idevice_error_t device_error = IDEVICE_E_SUCCESS;
-	lockdownd_error_t lockdown_error = IDEVICE_E_SUCCESS;
+	lockdownd_error_t lockdown_error = LOCKDOWN_E_SUCCESS;
 
 	device_error = idevice_new(&device, client->udid);
 	if (device_error != IDEVICE_E_SUCCESS) {

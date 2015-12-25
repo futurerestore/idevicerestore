@@ -100,14 +100,7 @@ struct idevicerestore_client_t {
 	void* progress_cb_data;
 };
 
-static struct idevicerestore_mode_t idevicerestore_modes[] = {
-	{  0, "WTF"      },
-	{  1, "DFU"      },
-	{  2, "Recovery" },
-	{  3, "Restore"  },
-	{  4, "Normal"   },
-	{ -1,  NULL      }
-};
+extern struct idevicerestore_mode_t idevicerestore_modes[];
 
 extern int idevicerestore_debug;
 
@@ -120,7 +113,7 @@ void print_progress_bar(double progress);
 int read_file(const char* filename, void** data, size_t* size);
 int write_file(const char* filename, const void* data, size_t size);
 
-char *generate_guid();
+char *generate_guid(void);
 
 #ifdef WIN32
 #include <windows.h>
@@ -138,8 +131,6 @@ char *generate_guid();
 int mkdir_with_parents(const char *dir, int mode);
 
 void idevicerestore_progress(struct idevicerestore_client_t* client, int step, double progress);
-
-void plist_dict_merge(plist_t* dictionary, plist_t node);
 
 #ifdef __cplusplus
 }
