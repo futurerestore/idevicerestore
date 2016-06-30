@@ -349,7 +349,10 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		}
 
 		// we need to refresh the current mode again
-		check_mode(client);
+		if (check_mode(client) < 0) {
+			error("ERROR: Unable to discover device mode. Please make sure a device is attached.\n");
+			return -1;
+		}
 		info("Found device in %s mode\n", client->mode->string);
 	}
 
@@ -756,7 +759,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 
 		// Extract filesystem from IPSW
 		info("Extracting filesystem from IPSW\n");
-		if (ipsw_extract_to_file(client->ipsw, fsname, filesystem) < 0) {
+		if (ipsw_extract_to_file_with_progress(client->ipsw, fsname, filesystem, 1) < 0) {
 			error("ERROR: Unable to extract filesystem from IPSW\n");
 			if (client->tss)
 				plist_free(client->tss);
@@ -1220,14 +1223,23 @@ int check_mode(struct idevicerestore_client_t* client) {
 		mode = MODE_RESTORE;
 	}
 
-	client->mode = &idevicerestore_modes[mode];
+	if (mode == MODE_UNKNOWN) {
+		client->mode = NULL;
+	} else {
+		client->mode = &idevicerestore_modes[mode];
+	}
 	return mode;
 }
 
 const char* check_hardware_model(struct idevicerestore_client_t* client) {
 	const char* hw_model = NULL;
+	int mode = MODE_UNKNOWN;
 
-	switch (client->mode->index) {
+	if (client->mode) {
+		mode = client->mode->index;
+	}
+
+	switch (mode) {
 	case MODE_RESTORE:
 		hw_model = restore_check_hardware_model(client);
 		break;
@@ -1254,8 +1266,13 @@ const char* check_hardware_model(struct idevicerestore_client_t* client) {
 int is_image4_supported(struct idevicerestore_client_t* client)
 {
 	int res = 0;
+	int mode = MODE_UNKNOWN;
 
-	switch (client->mode->index) {
+	if (client->mode) {
+		mode = client->mode->index;
+	}
+
+	switch (mode) {
 	case MODE_NORMAL:
 		res = normal_is_image4_supported(client);
 		break;
@@ -1273,7 +1290,13 @@ int is_image4_supported(struct idevicerestore_client_t* client)
 }
 
 int get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
-	switch (client->mode->index) {
+	int mode = MODE_UNKNOWN;
+
+	if (client->mode) {
+		mode = client->mode->index;
+	}
+
+	switch (mode) {
 	case MODE_NORMAL:
 		if (normal_get_ecid(client, ecid) < 0) {
 			*ecid = 0;
@@ -1287,6 +1310,7 @@ int get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
 			return -1;
 		}
 		break;
+
 	case MODE_RECOVERY:
 		if (recovery_get_ecid(client, ecid) < 0) {
 			*ecid = 0;
@@ -1296,6 +1320,7 @@ int get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
 
 	default:
 		error("ERROR: Device is in an invalid state\n");
+		*ecid = 0;
 		return -1;
 	}
 
@@ -1303,12 +1328,18 @@ int get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
 }
 
 int get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size) {
+	int mode = MODE_UNKNOWN;
+
 	*nonce = NULL;
 	*nonce_size = 0;
 
 	info("Getting ApNonce ");
 
-	switch (client->mode->index) {
+	if (client->mode) {
+		mode = client->mode->index;
+	}
+
+	switch (mode) {
 	case MODE_NORMAL:
 		info("in normal mode... ");
 		if (normal_get_ap_nonce(client, nonce, nonce_size) < 0) {
@@ -1332,6 +1363,7 @@ int get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, 
 		break;
 
 	default:
+		info("failed\n");
 		error("ERROR: Device is in an invalid state\n");
 		return -1;
 	}
@@ -1346,12 +1378,18 @@ int get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, 
 }
 
 int get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size) {
+	int mode = MODE_UNKNOWN;
+
 	*nonce = NULL;
 	*nonce_size = 0;
 
 	info("Getting SepNonce ");
 
-	switch (client->mode->index) {
+	if (client->mode) {
+		mode = client->mode->index;
+	}
+
+	switch (mode) {
 	case MODE_NORMAL:
 		info("in normal mode... ");
 		if (normal_get_sep_nonce(client, nonce, nonce_size) < 0) {
@@ -1375,6 +1413,7 @@ int get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce,
 		break;
 
 	default:
+		info("failed\n");
 		error("ERROR: Device is in an invalid state\n");
 		return -1;
 	}

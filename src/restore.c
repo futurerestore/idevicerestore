@@ -39,25 +39,50 @@
 #include "restore.h"
 #include "common.h"
 
-#define WAIT_FOR_STORAGE       11
-#define CREATE_PARTITION_MAP   12
-#define CREATE_FILESYSTEM      13
-#define RESTORE_IMAGE          14
-#define VERIFY_RESTORE         15
-#define CHECK_FILESYSTEM       16
-#define MOUNT_FILESYSTEM       17
-#define FLASH_NOR              19
-#define UPDATE_BASEBAND        20
-#define FINIALIZE_NAND         21
-#define MODIFY_BOOTARGS        26
-#define LOAD_KERNEL_CACHE      27
-#define PARTITION_NAND_DEVICE  28
-#define WAIT_FOR_NAND          29
-#define UNMOUNT_FILESYSTEM     30
-#define WAIT_FOR_DEVICE        33
-#define LOAD_NOR               36
-
-#define CREATE_SYSTEM_KEY_BAG  49
+#define CREATE_PARTITION_MAP          11
+#define CREATE_FILESYSTEM             12
+#define RESTORE_IMAGE                 13
+#define VERIFY_RESTORE                14
+#define CHECK_FILESYSTEMS             15
+#define MOUNT_FILESYSTEMS             16
+#define FIXUP_VAR                     17
+#define FLASH_FIRMWARE                18
+#define UPDATE_BASEBAND               19
+#define SET_BOOT_STAGE                20
+#define REBOOT_DEVICE                 21
+#define SHUTDOWN_DEVICE               22
+#define TURN_ON_ACCESSORY_POWER       23
+#define CLEAR_BOOTARGS                24
+#define MODIFY_BOOTARGS               25
+#define INSTALL_ROOT                  26
+#define INSTALL_KERNELCACHE           27
+#define WAIT_FOR_NAND                 28
+#define UNMOUNT_FILESYSTEMS           29
+#define SET_DATETIME                  30
+#define EXEC_IBOOT                    31
+#define FINALIZE_NAND_EPOCH_UPDATE    32
+#define CHECK_INAPPR_BOOT_PARTITIONS  33
+#define CREATE_FACTORY_RESTORE_MARKER 34
+#define LOAD_FIRMWARE                 35
+#define CHECK_BATTERY_VOLTAGE         38
+#define WAIT_BATTERY_CHARGE           39
+#define CLOSE_MODEM_TICKETS           40
+#define MIGRATE_DATA                  41
+#define WIPE_STORAGE_DEVICE           42
+#define SEND_APPLE_LOGO               43
+#define CHECK_LOGS                    44
+#define CLEAR_NVRAM                   46
+#define UPDATE_GAS_GAUGE              47
+#define PREPARE_BASEBAND_UPDATE       48
+#define BOOT_BASEBAND                 49
+#define CREATE_SYSTEM_KEYBAG          50
+#define UPDATE_IR_MCU_FIRMWARE        51
+#define RESIZE_SYSTEM_PARTITION       52
+#define PAIR_STOCKHOLM                54
+#define UPDATE_STOCKHOLM              55
+#define UPDATE_SWDHID                 56
+#define UPDATE_S3E_FIRMWARE           58
+#define UPDATE_SE_FIRMWARE            59
 
 static int restore_finished = 0;
 
@@ -446,59 +471,97 @@ int restore_open_with_timeout(struct idevicerestore_client_t* client) {
 	return 0;
 }
 
-const char* restore_progress_string(unsigned int operation) {
+const char* restore_progress_string(unsigned int operation)
+{
 	switch (operation) {
-	case WAIT_FOR_STORAGE:
-		return "Waiting for storage device";
-
 	case CREATE_PARTITION_MAP:
 		return "Creating partition map";
-
 	case CREATE_FILESYSTEM:
 		return "Creating filesystem";
-
 	case RESTORE_IMAGE:
 		return "Restoring image";
-
 	case VERIFY_RESTORE:
 		return "Verifying restore";
-
-	case CHECK_FILESYSTEM:
+	case CHECK_FILESYSTEMS:
 		return "Checking filesystems";
-
-	case MOUNT_FILESYSTEM:
+	case MOUNT_FILESYSTEMS:
 		return "Mounting filesystems";
-
-	case FLASH_NOR:
-		return "Flashing NOR";
-
+	case FIXUP_VAR:
+		return "Fixing up /var";
+	case FLASH_FIRMWARE:
+		return "Flashing firmware";
 	case UPDATE_BASEBAND:
 		return "Updating baseband";
-
-	case FINIALIZE_NAND:
-		return "Finalizing NAND epoch update";
-
+	case SET_BOOT_STAGE:
+		return "Setting boot stage";
+	case REBOOT_DEVICE:
+		return "Rebooting device";
+	case SHUTDOWN_DEVICE:
+		return "Shutdown device";
+	case TURN_ON_ACCESSORY_POWER:
+		return "Turning on accessory power";
+	case CLEAR_BOOTARGS:
+		return "Clearing persistent boot-args";
 	case MODIFY_BOOTARGS:
 		return "Modifying persistent boot-args";
-
-	case UNMOUNT_FILESYSTEM:
-		return "Unmounting filesystems";
-
-	case PARTITION_NAND_DEVICE:
-		return "Partition NAND device";
-
+	case INSTALL_ROOT:
+		return "Installing root";
+	case INSTALL_KERNELCACHE:
+		return "Installing kernelcache";
 	case WAIT_FOR_NAND:
 		return "Waiting for NAND";
-
-	case WAIT_FOR_DEVICE:
-		return "Waiting for device";
-
-	case LOAD_KERNEL_CACHE:
-		return "Loading kernelcache";
-
-	case LOAD_NOR:
-		return "Loading NOR data to flash";
-
+	case UNMOUNT_FILESYSTEMS:
+		return "Unmounting filesystems";
+	case SET_DATETIME:
+		return "Setting date and time on device";
+	case EXEC_IBOOT:
+		return "Executing iBEC to bootstrap update";
+	case FINALIZE_NAND_EPOCH_UPDATE:
+		return "Finalizing NAND epoch update";
+	case CHECK_INAPPR_BOOT_PARTITIONS:
+		return "Checking for inappropriate bootable partitions";
+	case CREATE_FACTORY_RESTORE_MARKER:
+		return "Creating factory restore marker";
+	case LOAD_FIRMWARE:
+		return "Loading firmware data to flash";
+	case CHECK_BATTERY_VOLTAGE:
+		return "Checking battery voltage";
+	case WAIT_BATTERY_CHARGE:
+		return "Waiting for battery to charge";
+	case CLOSE_MODEM_TICKETS:
+		return "Closing modem tickets";
+	case MIGRATE_DATA:
+		return "Migrating data";
+	case WIPE_STORAGE_DEVICE:
+		return "Wiping storage device";
+	case SEND_APPLE_LOGO:
+		return "Sending Apple logo to device";
+	case CHECK_LOGS:
+		return "Checking for uncollected logs";
+	case CLEAR_NVRAM:
+		return "Clearing NVRAM";
+	case UPDATE_GAS_GAUGE:
+		return "Updating gas gauge software";
+	case PREPARE_BASEBAND_UPDATE:
+		return "Preparing for baseband update";
+	case BOOT_BASEBAND:
+		return "Booting the baseband";
+	case CREATE_SYSTEM_KEYBAG:
+		return "Creating system key bag";
+	case UPDATE_IR_MCU_FIRMWARE:
+		return "Updating IR MCU firmware";
+	case RESIZE_SYSTEM_PARTITION:
+		return "Resizing system partition";
+	case PAIR_STOCKHOLM:
+		return "Pairing Stockholm";
+	case UPDATE_STOCKHOLM:
+		return "Updating Stockholm";
+	case UPDATE_SWDHID:
+		return "Updating SWDHID";
+	case UPDATE_S3E_FIRMWARE:
+		return "Updating S3E Firmware";
+	case UPDATE_SE_FIRMWARE:
+		return "Updating SE Firmware";
 	default:
 		return "Unknown operation";
 	}
@@ -542,26 +605,35 @@ int restore_handle_progress_msg(struct idevicerestore_client_t* client, plist_t 
 	}
 	plist_get_uint_val(node, &progress);
 
+	/* for restore protocol version < 14 all operation codes > 35 are 1 less so we add one */
+	int adapted_operation = (int)operation;
+	if (client && client->restore && client->restore->protocol_version < 14) {
+		if (adapted_operation > 35) {
+			adapted_operation++;
+		}
+	}
+
 	if ((progress > 0) && (progress <= 100)) {
 		if ((int)operation != lastop) {
-			info("%s (%d)\n", restore_progress_string(operation), (int)operation);
+			info("%s (%d)\n", restore_progress_string(adapted_operation), (int)operation);
 		}
-		switch ((int)operation) {
-		case 14:
-			idevicerestore_progress(client, RESTORE_STEP_FLASH_FS, progress / 100.0);
+		switch (adapted_operation) {
+		case VERIFY_RESTORE:
+			idevicerestore_progress(client, RESTORE_STEP_VERIFY_FS, progress / 100.0);
 			break;
-		case 18:
+		case FLASH_FIRMWARE:
 			idevicerestore_progress(client, RESTORE_STEP_FLASH_FW, progress / 100.0);
 			break;
-		case 19:
+		case UPDATE_BASEBAND:
+		case UPDATE_IR_MCU_FIRMWARE:
 			idevicerestore_progress(client, RESTORE_STEP_FLASH_BB, progress / 100.0);
 			break;
 		default:
-			debug("Unhandled progress operation %d\n", (int)operation);
+			debug("Unhandled progress operation %d (%d)\n", adapted_operation, (int)operation);
 			break;
 		}
 	} else {
-		info("%s (%d)\n", restore_progress_string(operation), (int)operation);
+		info("%s (%d)\n", restore_progress_string(adapted_operation), (int)operation);
 	}
 	lastop = (int)operation;
 
@@ -1577,6 +1649,88 @@ int restore_send_fdr_trust_data(restored_client_t restore, idevice_t device)
 	return 0;
 }
 
+int restore_send_fud_data(restored_client_t restore, struct idevicerestore_client_t *client, plist_t build_identity)
+{
+	restored_error_t restore_error;
+	plist_t dict;
+	plist_t fud_dict;
+	plist_t build_id_manifest;
+	plist_dict_iter iter = NULL;
+
+	info("About to send FUD data...\n");
+
+	fud_dict = plist_new_dict();
+
+	build_id_manifest = plist_dict_get_item(build_identity, "Manifest");
+	if (build_id_manifest) {
+		plist_dict_new_iter(build_id_manifest, &iter);
+	}
+	if (iter) {
+		char *component;
+		plist_t manifest_entry;
+		do {
+			component = NULL;
+			manifest_entry = NULL;
+			plist_dict_next_item(build_id_manifest, iter, &component, &manifest_entry);
+			if (component && manifest_entry && plist_get_node_type(manifest_entry) == PLIST_DICT) {
+				uint8_t is_fud = 0;
+				plist_t is_fud_node = plist_access_path(manifest_entry, 2, "Info", "IsFUDFirmware");
+				if (is_fud_node && plist_get_node_type(is_fud_node) == PLIST_BOOLEAN) {
+					plist_get_bool_val(is_fud_node, &is_fud);
+				}
+				if (is_fud) {
+					char *path = NULL;
+					unsigned char* data = NULL;
+					unsigned int size = 0;
+					unsigned char* component_data = NULL;
+					unsigned int component_size = 0;
+					int ret = -1;
+
+					info("Found FUD component '%s'\n", component);
+
+					build_identity_get_component_path(build_identity, component, &path);
+					if (path) {
+						ret = extract_component(client->ipsw, path, &component_data, &component_size);
+					}
+					free(path);
+					path = NULL;
+					if (ret < 0) {
+						error("ERROR: Unable to extract component: %s\n", component);
+					}
+
+					ret = personalize_component(component, component_data, component_size, client->tss, &data, &size);
+					free(component_data);
+					component_data = NULL;
+					if (ret < 0) {
+						error("ERROR: Unable to get personalized component: %s\n", component);
+						return -1;
+					}
+
+					plist_dict_set_item(fud_dict, component, plist_new_data((const char*)data, size));
+					free(data);
+				}
+				free(component);
+			}
+		} while (manifest_entry);
+		free(iter);
+	}
+
+	dict = plist_new_dict();
+	plist_dict_set_item(dict, "FUDImageData", fud_dict);
+
+	info("Sending FUD data now...\n");
+	restore_error = restored_send(restore, dict);
+	plist_free(dict);
+	if (restore_error != RESTORE_E_SUCCESS) {
+		error("ERROR: During sending FUD data (%d)\n", restore_error);
+		return -1;
+	}
+
+	info("Done sending FUD data\n");
+
+	return 0;
+}
+
 int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idevice_t device, restored_client_t restore, plist_t message, plist_t build_identity, const char* filesystem)
 {
 	char* type = NULL;
@@ -1633,6 +1787,13 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idev
 		else if (!strcmp(type, "FDRTrustData")) {
 			if(restore_send_fdr_trust_data(restore, device) < 0) {
 				error("ERROR: Unable to send FDR Trust data\n");
+				return -1;
+			}
+		}
+
+		else if (!strcmp(type, "FUDData")) {
+			if(restore_send_fud_data(restore, client, build_identity) < 0) {
+				error("ERROR: Unable to send FUD data\n");
 				return -1;
 			}
 		}
@@ -1918,6 +2079,14 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		free(type);
 		plist_free(message);
 		message = NULL;
+	}
+
+	if (fdr_control_channel) {
+		fdr_disconnect(fdr_control_channel);
+		if (fdr_thread) {
+			thread_join(fdr_thread);
+		}
+		fdr_control_channel = NULL;
 	}
 
 	restore_client_free(client);
