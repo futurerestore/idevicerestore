@@ -110,7 +110,7 @@ void usage(int argc, char* argv[]) {
     printf("      --nobootx\t\tdoes not run \"bootx\" command\n");
     printf("  -g, --paniclog\tboot restore ramdisk, print paniclog (if available) and reboot\n");
 	printf("\n");
-	printf("Homepage: <" PACKAGE_URL ">\n");
+    printf("Homepage: <" PACKAGE_URL ">\n");
 }
 
 static int load_version_data(struct idevicerestore_client_t* client)
@@ -984,10 +984,13 @@ void idevicerestore_client_free(struct idevicerestore_client_t* client)
 	if (client->version_data) {
 		plist_free(client->version_data);
 	}
-	if (client->nonce) {
-		free(client->nonce);
-	}
-	if (client->udid) {
+    if (client->nonce) {
+        free(client->nonce);
+    }
+    if (client->sepnonce) {
+        free(client->sepnonce);
+    }
+    if (client->udid) {
 		free(client->udid);
 	}
 	if (client->srnm) {
@@ -1584,8 +1587,13 @@ int get_tss_response(struct idevicerestore_client_t* client, plist_t build_ident
 	}
 	unsigned char* sep_nonce = NULL;
 	int sep_nonce_size = 0;
-	get_sep_nonce(client, &sep_nonce, &sep_nonce_size);
-
+    if (!client->sepnonce_size) get_sep_nonce(client, &sep_nonce, &sep_nonce_size);
+    else {
+        sep_nonce_size = client->sepnonce_size;
+        sep_nonce = malloc(sep_nonce_size);
+        memcpy(sep_nonce, client->sepnonce, sep_nonce_size);
+    }
+    
 	if (sep_nonce) {
 		plist_dict_set_item(parameters, "ApSepNonce", plist_new_data((const char*)sep_nonce, sep_nonce_size));
 		free(sep_nonce);

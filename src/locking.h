@@ -20,6 +20,11 @@
  */
 #ifndef LOCKING_H
 #define LOCKING_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdio.h>
 #ifdef WIN32
 #include <windows.h>
@@ -39,5 +44,10 @@ typedef struct {
 
 int lock_file(const char* filename, lock_info_t* lockp);
 int unlock_file(lock_info_t* lockp);
+
+    
+#ifdef __cplusplus
+}
+#endif
 
 #endif

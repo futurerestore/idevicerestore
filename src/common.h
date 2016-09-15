@@ -70,16 +70,22 @@ struct idevicerestore_entry_t {
 };
 
 struct idevicerestore_client_t {
-	int flags;
+    int flags;
     char *otamanifest;
-	plist_t tss;
-	char* tss_url;
-	plist_t version_data;
-	uint64_t ecid;
-	unsigned char* nonce;
-	int nonce_size;
-	int image4supported;
-	plist_t preflight_info;
+    char *bbfwtmp;
+    char *sepfwdata;
+    size_t sepfwdatasize;
+    plist_t tss;
+    plist_t septss;
+    char* tss_url;
+    plist_t version_data;
+    uint64_t ecid;
+    unsigned char* nonce;
+    int nonce_size;
+    unsigned char* sepnonce;
+    int sepnonce_size;
+    int image4supported;
+    plist_t preflight_info;
 	char* udid;
 	char* srnm;
 	char* ipsw;

@@ -1020,15 +1020,20 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 	if (!build_identity_has_component(build_identity, "RestoreSEP") &&
 	    build_identity_get_component_path(build_identity, "RestoreSEP", &restore_sep_path) == 0) {
 		component = "RestoreSEP";
-		ret = extract_component(client->ipsw, restore_sep_path, &component_data, &component_size);
-		free(restore_sep_path);
-		if (ret < 0) {
+        if (!client->sepfwdatasize) ret = extract_component(client->ipsw, restore_sep_path, &component_data, &component_size);
+        else{
+            component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
+            memcpy(component_data, client->sepfwdata, component_size);
+        }
+        
+        free(restore_sep_path);
+        if (ret < 0) {
 			error("ERROR: Unable to extract component: %s\n", component);
 			return -1;
 		}
 
-		ret = personalize_component(component, component_data, component_size, client->tss, &personalized_data, &personalized_size);
-		free(component_data);
+        ret = personalize_component(component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
+        free(component_data);
 		component_data = NULL;
 		component_size = 0;
 		if (ret < 0) {
@@ -1045,15 +1050,19 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 	if (!build_identity_has_component(build_identity, "SEP") &&
 	    build_identity_get_component_path(build_identity, "SEP", &sep_path) == 0) {
 		component = "SEP";
-		ret = extract_component(client->ipsw, sep_path, &component_data, &component_size);
-		free(sep_path);
+        if (!client->sepfwdatasize) ret = extract_component(client->ipsw, sep_path, &component_data, &component_size);
+        else{
+            component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
+            memcpy(component_data, client->sepfwdata, component_size);
+        }
+        free(sep_path);
 		if (ret < 0) {
 			error("ERROR: Unable to extract component: %s\n", component);
 			return -1;
 		}
 
-		ret = personalize_component(component, component_data, component_size, client->tss, &personalized_data, &personalized_size);
-		free(component_data);
+		ret = personalize_component(component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
+        free(component_data);
 		component_data = NULL;
 		component_size = 0;
 		if (ret < 0) {
@@ -1463,7 +1472,7 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 	uint64_t bb_chip_id = 0;
 	plist_t response = NULL;
 	char* buffer = NULL;
-	char* bbfwtmp = NULL;
+	char* bbfwtmp = strdup(client->bbfwtmp);
 	plist_t dict = NULL;
 
 	info("About to send BasebandData...\n");
@@ -1497,7 +1506,9 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 		plist_dict_set_item(parameters, "ApECID", plist_new_uint(client->ecid));
 		if (bb_nonce) {
 			plist_dict_set_item(parameters, "BbNonce", plist_new_data((const char*)bb_nonce, bb_nonce_size));
-		}
+        }else{
+            info("sending request without baseband nonce\n");
+        }
 		plist_dict_set_item(parameters, "BbChipID", plist_new_uint(bb_chip_id));
 		plist_dict_set_item(parameters, "BbGoldCertId", plist_new_uint(bb_cert_id));
 		plist_dict_set_item(parameters, "BbSNUM", plist_new_data((const char*)bb_snum, bb_snum_size));
@@ -1513,7 +1524,6 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 		}
 
 		/* add baseband parameters */
-		tss_request_add_common_tags(request, parameters, NULL);
 		tss_request_add_baseband_tags(request, parameters, NULL);
 
 		plist_t node = plist_access_path(build_identity, 2, "Info", "FDRSupport");
@@ -1557,17 +1567,32 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 		return -1;
 	}
 
-	// extract baseband firmware to temp file
-	bbfwtmp = tempnam(NULL, "bbfw_");
-	if (!bbfwtmp) {
-		error("WARNING: Could not generate temporary filename, using bbfw.tmp\n");
-		bbfwtmp = strdup("bbfw.tmp");
-	}
-	if (ipsw_extract_to_file(client->ipsw, bbfwpath, bbfwtmp) != 0) {
-		error("ERROR: Unable to extract baseband firmware from ipsw\n");
-		plist_free(response);
-		return -1;
-	}
+    // extract baseband firmware to temp file
+    bbfwtmp = tempnam(NULL, "bbfw_");
+    if (!bbfwtmp) {
+        error("WARNING: Could not generate temporary filename, using bbfw.tmp\n");
+        bbfwtmp = strdup("bbfw.tmp");
+    }
+    if (!client->bbfwtmp) {
+        if (ipsw_extract_to_file(client->ipsw, bbfwpath, bbfwtmp) != 0) {
+            error("ERROR: Unable to extract baseband firmware from ipsw\n");
+            plist_free(response);
+            return -1;
+        }
+    }else{
+        FILE *f1 = fopen(client->bbfwtmp,"r");
+        FILE *f2 = fopen(bbfwtmp,"w");
+        size_t s;
+        fseek(f1, 0, SEEK_END);
+        s = ftell(f1);
+        fseek(f1, 0, SEEK_SET);
+        
+        char * buf = malloc(s);
+        fread(buf, 1, s, f1);
+        fwrite(buf, 1, s, f2);
+        fclose(f1);
+        fclose(f2);
+    }
 
 	if (bb_nonce && !client->restore->bbtss) {
 		// keep the response for later requests
