@@ -63,6 +63,16 @@ AC_SUBST(GLOBAL_CFLAGS)
 AC_SUBST(AC_LDFLAGS)
 AC_SUBST(AC_LDADD)
 
+case $CFLAGS in
+  *IDEVICERESTORE_NOMAIN*)
+    nomain=true
+  ;;
+  *)
+  ;;
+esac
+
+AM_CONDITIONAL(NOMAIN, test x$nomain == xtrue)
+
 # check for large file support
 AC_SYS_LARGEFILE
 LFS_CFLAGS=''
