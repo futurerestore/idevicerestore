@@ -1523,6 +1523,16 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 			return -1;
 		}
 
+        tss_request_add_common_tags(request, parameters, NULL);
+        tss_request_add_ap_tags(request, parameters, NULL);
+        
+        
+        //we don't want an apticket
+        if (client->image4supported)
+            plist_dict_set_item(request, "@ApImg4Ticket", plist_new_bool(0));
+        else
+            plist_dict_set_item(request, "@APTicket", plist_new_bool(0));
+        
 		/* add baseband parameters */
 		tss_request_add_baseband_tags(request, parameters, NULL);
 
@@ -1803,7 +1813,7 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idev
 		}
 
 		else if (!strcmp(type, "BasebandData")) {
-			if(restore_send_baseband_data(restore, client, build_identity, message) < 0) {
+            if(restore_send_baseband_data(restore, client, (client->basebandBuildIdentity) ? client->basebandBuildIdentity : build_identity, message) < 0) {
 				error("ERROR: Unable to send baseband data\n");
 				return -1;
 			}
@@ -1928,9 +1938,9 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
         return 0;
     }
     
-	if (plist_dict_get_item(client->tss, "BBTicket")) {
-		client->restore->bbtss = plist_copy(client->tss);
-	}
+//	if (plist_dict_get_item(client->tss, "BBTicket")) {
+//		client->restore->bbtss = plist_copy(client->tss);
+//	}
 
 	fdr_client_t fdr_control_channel = NULL;
 	info("Starting FDR listener thread\n");

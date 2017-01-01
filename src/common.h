@@ -77,6 +77,7 @@ struct idevicerestore_client_t {
     size_t sepfwdatasize;
     plist_t tss;
     plist_t septss;
+    plist_t basebandBuildIdentity;
     char* tss_url;
     plist_t version_data;
     uint64_t ecid;
