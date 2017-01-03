@@ -1472,7 +1472,8 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 	uint64_t bb_chip_id = 0;
 	plist_t response = NULL;
 	char* buffer = NULL;
-	char* bbfwtmp = strdup(client->bbfwtmp);
+	char* bbfwtmp = NULL;
+    if (client->bbfwtmp) bbfwtmp = strdup(client->bbfwtmp);
 	plist_t dict = NULL;
 
 	info("About to send BasebandData...\n");
