@@ -67,6 +67,7 @@ static struct option longopts[] = {
 	{ "cydia",   no_argument,       NULL, 's' },
 	{ "exclude", no_argument,       NULL, 'x' },
 	{ "shsh",    no_argument,       NULL, 't' },
+	{ "keep-pers", no_argument,     NULL, 'k' },
 	{ "pwn",     no_argument,       NULL, 'p' },
 	{ "no-action", no_argument,     NULL, 'n' },
     { "downgrade", no_argument,     NULL, 'w' },
@@ -77,7 +78,6 @@ static struct option longopts[] = {
     { "nobootx", no_argument, NULL, 'b' },
 	{ NULL, 0, NULL, 0 }
 };
-#endif
 
 void usage(int argc, char* argv[]) {
 	char* name = strrchr(argv[0], '/');
@@ -98,7 +98,8 @@ void usage(int argc, char* argv[]) {
 	printf("  -s, --cydia\t\tuse Cydia's signature service instead of Apple's\n");
 	printf("  -x, --exclude\t\texclude nor/baseband upgrade\n");
 	printf("  -t, --shsh\t\tfetch TSS record and save to .shsh file, then exit\n");
-	printf("  -p, --pwn\t\tPut device in pwned DFU mode and exit (limera1n devices only)\n");
+	printf("  -k, --keep-pers\twrite personalized components to files for debugging\n");
+	printf("  -p, --pwn\t\tput device in pwned DFU mode and exit (limera1n devices only)\n");
 	printf("  -n, --no-action\tDo not perform any restore action. If combined with -l option\n");
 	printf("                 \tthe on demand ipsw download is performed before exiting.\n");
 	printf("  -w, --downgrade\tdowngrade with a custom firmware\n");
@@ -112,6 +113,9 @@ void usage(int argc, char* argv[]) {
 	printf("\n");
     printf("Homepage: <" PACKAGE_URL ">\n");
 }
+#endif
+
+static int idevicerestore_keep_pers = 0;
 
 static int load_version_data(struct idevicerestore_client_t* client)
 {
@@ -1088,7 +1092,7 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	while ((opt = getopt_long(argc, argv, "dhcesxtplibgo:u:nC:w", longopts, &optindex)) > 0) {
+	while ((opt = getopt_long(argc, argv, "dhcesxtplibgo:u:nC:wk", longopts, &optindex)) > 0) {
 		switch (opt) {
 		case 'h':
 			usage(argc, argv);
@@ -1138,6 +1142,10 @@ int main(int argc, char* argv[]) {
 
 		case 't':
 			client->flags |= FLAG_SHSHONLY;
+			break;
+
+		case 'k':
+			idevicerestore_keep_pers = 1;
 			break;
 
 		case 'p':
@@ -1792,12 +1800,10 @@ int personalize_component(const char *component_name, const unsigned char* compo
 				memcpy(stitched_component, component_data, component_size);
 			}
 		}
-
-		if (component_blob)
-			free(component_blob);
 	}
+	free(component_blob);
 
-	if (idevicerestore_debug) {
+	if (idevicerestore_keep_pers) {
 		write_file(component_name, stitched_component, stitched_component_size);
 	}
 
