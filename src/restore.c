@@ -1574,8 +1574,8 @@ int restore_send_baseband_data(restored_client_t restore, struct idevicerestore_
 			return -1;
 		}
 
-        tss_request_add_common_tags(request, parameters, NULL);
-        tss_request_add_ap_tags(request, parameters, NULL);
+//        tss_request_add_common_tags(request, parameters, NULL);
+//        tss_request_add_ap_tags(request, parameters, NULL);
         
         
         //we don't want an apticket
