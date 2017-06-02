@@ -260,35 +260,39 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
 	unsigned char* data = NULL;
 	char* path = NULL;
 	irecv_error_t err = 0;
-
-	if (client->tss) {
-		if (tss_response_get_path_by_entry(client->tss, component, &path) < 0) {
-			debug("NOTE: No path for component %s in TSS, will fetch from build_identity\n", component);
-		}
-	}
-	if (!path) {
-		if (build_identity_get_component_path(build_identity, component, &path) < 0) {
-			error("ERROR: Unable to get path for component '%s'\n", component);
-			free(path);
-			return -1;
-		}
-	}
-
-	unsigned char* component_data = NULL;
-	unsigned int component_size = 0;
-	int ret = extract_component(client->ipsw, path, &component_data, &component_size);
-	free(path);
-	if (ret < 0) {
-		error("ERROR: Unable to extract component: %s\n", component);
-		return -1;
-	}
-
-	ret = personalize_component(component, component_data, component_size, client->tss, &data, &size);
-	free(component_data);
-	if (ret < 0) {
-		error("ERROR: Unable to get personalized component: %s\n", component);
-		return -1;
-	}
+ 
+    if (!client->recovery_custom_component_function) {
+        if (client->tss) {
+            if (tss_response_get_path_by_entry(client->tss, component, &path) < 0) {
+                debug("NOTE: No path for component %s in TSS, will fetch from build_identity\n", component);
+            }
+        }
+        if (!path) {
+            if (build_identity_get_component_path(build_identity, component, &path) < 0) {
+                error("ERROR: Unable to get path for component '%s'\n", component);
+                free(path);
+                return -1;
+            }
+        }
+        
+        unsigned char* component_data = NULL;
+        unsigned int component_size = 0;
+        int ret = extract_component(client->ipsw, path, &component_data, &component_size);
+        free(path);
+        if (ret < 0) {
+            error("ERROR: Unable to extract component: %s\n", component);
+            return -1;
+        }
+        
+        ret = personalize_component(component, component_data, component_size, client->tss, &data, &size);
+        free(component_data);
+        if (ret < 0) {
+            error("ERROR: Unable to get personalized component: %s\n", component);
+            return -1;
+        }
+    }else{
+        client->recovery_custom_component_function(client,build_identity,component, &data, &size);
+    }
 
 	info("Sending %s (%d bytes)...\n", component, size);
 

@@ -109,6 +109,7 @@ struct idevicerestore_client_t {
 	char* cache_dir;
 	idevicerestore_progress_cb_t progress_cb;
 	void* progress_cb_data;
+    void (*recovery_custom_component_function)(struct idevicerestore_client_t*, plist_t, const char*, unsigned char**, unsigned int *);
 };
 
 extern struct idevicerestore_mode_t idevicerestore_modes[];
