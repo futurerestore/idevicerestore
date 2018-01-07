@@ -38,6 +38,7 @@
 #include "ipsw.h"
 #include "restore.h"
 #include "common.h"
+#include "endianness.h"
 
 #define CREATE_PARTITION_MAP          11
 #define CREATE_FILESYSTEM             12
@@ -83,6 +84,8 @@
 #define UPDATE_SWDHID                 56
 #define UPDATE_S3E_FIRMWARE           58
 #define UPDATE_SE_FIRMWARE            59
+#define UPDATE_SAVAGE                 60
+#define CERTIFY_SAVAGE                61
 
 static int restore_finished = 0;
 
@@ -219,7 +222,7 @@ int restore_check_mode(struct idevicerestore_client_t* client) {
 	return 0;
 }
 
-const char* restore_check_hardware_model(struct idevicerestore_client_t* client) {
+irecv_device_t restore_get_irecv_device(struct idevicerestore_client_t* client) {
 	char* model = NULL;
 	plist_t node = NULL;
 	idevice_t device = NULL;
@@ -271,11 +274,8 @@ const char* restore_check_hardware_model(struct idevicerestore_client_t* client)
 	plist_get_string_val(node, &model);
 	irecv_devices_get_device_by_hardware_model(model, &irecv_device);
 	free(model);
-	if (irecv_device && irecv_device->product_type) {
-		return irecv_device->hardware_model;
-	}
 
-	return NULL;
+	return irecv_device;
 }
 
 void restore_device_callback(const idevice_event_t* event, void* userdata) {
@@ -341,7 +341,7 @@ static int restore_is_current_device(struct idevicerestore_client_t* client, con
 	if ((restore_error == RESTORE_E_SUCCESS) && type && (strcmp(type, "com.apple.mobile.restored") == 0)) {
 		debug("%s: Connected to %s, version %d\n", __func__, type, (int)version);
 	} else {
-		info("%s: device %s is not in restore mode\n", __func__, udid);
+		debug("%s: device %s is not in restore mode\n", __func__, udid);
 		restored_client_free(restored);
 		idevice_free(device);
 		return 0;
@@ -552,6 +552,10 @@ const char* restore_progress_string(unsigned int operation)
 		return "Updating S3E Firmware";
 	case UPDATE_SE_FIRMWARE:
 		return "Updating SE Firmware";
+	case UPDATE_SAVAGE:
+		return "Updating Savage";
+	case CERTIFY_SAVAGE:
+		return "Certifying Savage";
 	default:
 		return "Unknown operation";
 	}
@@ -826,7 +830,8 @@ int restore_send_root_ticket(restored_client_t restore, struct idevicerestore_cl
 	return 0;
 }
 
-int restore_send_kernelcache(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity) {
+int restore_send_component(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity, const char *component)
+{
 	unsigned int size = 0;
 	unsigned char* data = NULL;
 	char* path = NULL;
@@ -834,28 +839,27 @@ int restore_send_kernelcache(restored_client_t restore, struct idevicerestore_cl
 	plist_t dict = NULL;
 	restored_error_t restore_error = RESTORE_E_SUCCESS;
 
-	info("About to send KernelCache...\n");
+	info("About to send %s...\n", component);
 
 	if (client->tss) {
-		if (tss_response_get_path_by_entry(client->tss, "KernelCache", &path) < 0) {
-			debug("NOTE: No path for component KernelCache in TSS, will fetch from build_identity\n");
+		if (tss_response_get_path_by_entry(client->tss, component, &path) < 0) {
+			debug("NOTE: No path for component %s in TSS, will fetch from build identity\n", component);
 		}
 	}
 	if (!path) {
-		if (build_identity_get_component_path(build_identity, "KernelCache", &path) < 0) {
-			error("ERROR: Unable to find kernelcache path\n");
+		if (build_identity_get_component_path(build_identity, component, &path) < 0) {
+			error("ERROR: Unable to find %s path from build identity\n", component);
 			return -1;
 		}
 	}
 
-	const char* component = "KernelCache";
 	unsigned char* component_data = NULL;
 	unsigned int component_size = 0;
 	int ret = extract_component(client->ipsw, path, &component_data, &component_size);
 	free(path);
 	path = NULL;
 	if (ret < 0) {
-		error("ERROR: Unable to extract component: %s\n", component);
+		error("ERROR: Unable to extract component %s\n", component);
 		return -1;
 	}
 
@@ -863,16 +867,18 @@ int restore_send_kernelcache(restored_client_t restore, struct idevicerestore_cl
 	free(component_data);
 	component_data = NULL;
 	if (ret < 0) {
-		error("ERROR: Unable to get personalized component: %s\n", component);
+		error("ERROR: Unable to get personalized component %s\n", component);
 		return -1;
 	}
 
 	dict = plist_new_dict();
 	blob = plist_new_data((char*)data, size);
-	plist_dict_set_item(dict, "KernelCacheFile", blob);
+	char compkeyname[256];
+	sprintf(compkeyname, "%sFile", component);
+	plist_dict_set_item(dict, compkeyname, blob);
 	free(data);
 
-	info("Sending KernelCache now...\n");
+	info("Sending %s now...\n", component);
 	restore_error = restored_send(restore, dict);
 	plist_free(dict);
 	if (restore_error != RESTORE_E_SUCCESS) {
@@ -880,7 +886,7 @@ int restore_send_kernelcache(restored_client_t restore, struct idevicerestore_cl
 		return -1;
 	}
 
-	info("Done sending KernelCache\n");
+	info("Done sending %s\n", component);
 	return 0;
 }
 
@@ -1037,9 +1043,9 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 			error("ERROR: Unable to extract component: %s\n", component);
 			return -1;
 		}
-		free(comppath);
 
 		if (personalize_component(component, component_data, component_size, client->tss, &nor_data, &nor_size) < 0) {
+			free(comppath);
 			free(component_data);
 			plist_free(firmware_files);
 			error("ERROR: Unable to get personalized component: %s\n", component);
@@ -1050,12 +1056,13 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 		component_size = 0;
 
 		/* make sure iBoot is the first entry in the array */
-		if (!strncmp("iBoot", filename, 4)) {
+		if (!strncmp("iBoot", filename, 5)) {
 			plist_array_insert_item(norimage_array, plist_new_data((char*)nor_data, (uint64_t)nor_size), 0);
 		} else {
 			plist_array_append_item(norimage_array, plist_new_data((char*)nor_data, (uint64_t)nor_size));
 		}
 
+		free(comppath);
 		free(nor_data);
 		nor_data = NULL;
 		nor_size = 0;
@@ -1066,7 +1073,7 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 	unsigned char* personalized_data = NULL;
 	unsigned int personalized_size = 0;
 
-	if (!build_identity_has_component(build_identity, "RestoreSEP") &&
+	if (build_identity_has_component(build_identity, "RestoreSEP") &&
 	    build_identity_get_component_path(build_identity, "RestoreSEP", &restore_sep_path) == 0) {
 		component = "RestoreSEP";
         if (!client->sepfwdatasize) ret = extract_component(client->ipsw, restore_sep_path, &component_data, &component_size);
@@ -1096,7 +1103,7 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 		personalized_size = 0;
 	}
 
-	if (!build_identity_has_component(build_identity, "SEP") &&
+	if (build_identity_has_component(build_identity, "SEP") &&
 	    build_identity_get_component_path(build_identity, "SEP", &sep_path) == 0) {
 		component = "SEP";
         if (!client->sepfwdatasize) ret = extract_component(client->ipsw, sep_path, &component_data, &component_size);
@@ -1161,7 +1168,7 @@ static const char* restore_get_bbfw_fn_for_element(const char* elem)
 		{ "RestoreSBL1", "restoresbl1.mbn" },
 		{ "SBL1", "sbl1.mbn" },
 		// ICE16 firmware files
-		{ "RestorePSI", "restorepsi.bin", },
+		{ "RestorePSI", "restorepsi.bin" },
 		{ "PSI", "psi_ram.bin" },
 		{ NULL, NULL }
 	};
@@ -1810,7 +1817,7 @@ int restore_send_fud_data(restored_client_t restore, struct idevicerestore_clien
 
 plist_t restore_get_se_firmware_data(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity, plist_t p_info)
 {
-	const char *comp_name = "SE,Firmware";
+	const char *comp_name = NULL;
 	char *comp_path = NULL;
 	unsigned char* component_data = NULL;
 	unsigned int component_size = 0;
@@ -1819,6 +1826,15 @@ plist_t restore_get_se_firmware_data(restored_client_t restore, struct idevicere
 	plist_t request = NULL;
 	plist_t response = NULL;
 	int ret;
+
+	if (build_identity_has_component(build_identity, "SE,Firmware")) {
+		comp_name = "SE,Firmware";
+	} else if (build_identity_has_component(build_identity, "SE,UpdatePayload")) {
+		comp_name = "SE,UpdatePayload";
+	} else {
+		error("ERROR: Neither 'SE,Firmware' nor 'SE,UpdatePayload' found in build identity.\n");
+		return NULL;
+	}
 
 	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable get path for '%s' component\n", comp_name);
@@ -1868,6 +1884,100 @@ plist_t restore_get_se_firmware_data(restored_client_t restore, struct idevicere
 	} else {
 		error("ERROR: No 'SE,Ticket' in TSS response, this might not work\n");
 	}
+
+	plist_dict_set_item(response, "FirmwareData", plist_new_data((char*)component_data, (uint64_t) component_size));
+	free(component_data);
+	component_data = NULL;
+	component_size = 0;
+
+	return response;
+}
+
+plist_t restore_get_savage_firmware_data(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity, plist_t p_info)
+{
+	const char *comp_name = NULL;
+	char *comp_path = NULL;
+	unsigned char* component_data = NULL;
+	unsigned int component_size = 0;
+	unsigned char* component_data_tmp = NULL;
+	plist_t fwdict = NULL;
+	plist_t parameters = NULL;
+	plist_t request = NULL;
+	plist_t response = NULL;
+	plist_t node = NULL;
+	uint8_t isprod = 0;
+	int ret;
+
+	node = plist_dict_get_item(p_info, "Savage,ProductionMode");
+	if (node && (plist_get_node_type(node) == PLIST_BOOLEAN)) {
+		plist_get_bool_val(node, &isprod);
+	}
+	node = NULL;
+	if (isprod) {
+		comp_name = "Savage,B2-Prod-Patch";
+	} else {
+		comp_name = "Savage,B2-Dev-Patch";
+	}
+
+	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+		error("ERROR: Unable get path for '%s' component\n", comp_name);
+		return NULL;
+	}
+
+	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	free(comp_path);
+	comp_path = NULL;
+	if (ret < 0) {
+		error("ERROR: Unable to extract '%s' component\n", comp_name);
+		return NULL;
+	}
+
+	/* create Savage request */
+	request = tss_request_new(NULL);
+	if (request == NULL) {
+		error("ERROR: Unable to create Savage TSS request\n");
+		free(component_data);
+		return NULL;
+	}
+
+	parameters = plist_new_dict();
+
+	/* add manifest for current build_identity to parameters */
+	tss_parameters_add_from_manifest(parameters, build_identity);
+
+	/* add Savage,* tags from info dictionary to parameters */
+	plist_dict_merge(&parameters, p_info);
+
+	/* add required tags for Savage TSS request */
+	tss_request_add_savage_tags(request, parameters, NULL);
+
+	plist_free(parameters);
+
+	info("Sending Savage TSS request...\n");
+	response = tss_request_send(request, client->tss_url);
+	plist_free(request);
+	if (response == NULL) {
+		error("ERROR: Unable to fetch Savage ticket\n");
+		free(component_data);
+		return NULL;
+	}
+
+	if (plist_dict_get_item(response, "Savage,Ticket")) {
+		info("Received Savage ticket\n");
+	} else {
+		error("ERROR: No 'Savage,Ticket' in TSS response, this might not work\n");
+	}
+
+	component_data_tmp = realloc(component_data, (size_t)component_size+16);
+	if (!component_data_tmp) {
+		free(component_data);
+		return NULL;
+	}
+	component_data = component_data_tmp;
+	memmove(component_data + 16, component_data, (size_t)component_size);
+	memset(component_data, '\0', 16);
+	*(uint32_t*)(component_data + 4) = htole32((uint32_t)component_size);
+	component_size += 16;
 
 	plist_dict_set_item(response, "FirmwareData", plist_new_data((char*)component_data, (uint64_t) component_size));
 	free(component_data);
@@ -1933,18 +2043,24 @@ int restore_send_firmware_updater_data(restored_client_t restore, struct idevice
 
 	plist_get_string_val(p_updater_name, &s_updater_name);
 
-	if (strcmp(s_updater_name, "SE")) {
+	if (strcmp(s_updater_name, "SE") == 0) {
+		fwdict = restore_get_se_firmware_data(restore, client, build_identity, p_info);
+		if (fwdict == NULL) {
+			error("ERROR: %s: Couldn't get SE firmware data\n", __func__);
+			goto error_out;
+		}
+	} else if (strcmp(s_updater_name, "Savage") == 0) {
+		fwdict = restore_get_savage_firmware_data(restore, client, build_identity, p_info);
+		if (fwdict == NULL) {
+			error("ERROR: %s: Couldn't get Savage firmware data\n", __func__);
+			goto error_out;
+		}
+	} else {
 		error("ERROR: %s: Got unknown updater name '%s'.", __func__, s_updater_name);
 		goto error_out;
 	}
 	free(s_updater_name);
 	s_updater_name = NULL;
-
-	fwdict = restore_get_se_firmware_data(restore, client, build_identity, p_info);
-	if (fwdict == NULL) {
-		error("ERROR: %s: Couldn't get SE firmware data\n", __func__);
-		goto error_out;
-	}
 
 	dict = plist_new_dict();
 	plist_dict_set_item(dict, "FirmwareResponseData", fwdict);
@@ -1996,8 +2112,15 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idev
 		}
 		// send KernelCache
 		else if (!strcmp(type, "KernelCache")) {
-			if(restore_send_kernelcache(restore, client, build_identity) < 0) {
+			if (restore_send_component(restore, client, build_identity, "KernelCache") < 0) {
 				error("ERROR: Unable to send kernelcache\n");
+				return -1;
+			}
+		}
+
+		else if (!strcmp(type, "DeviceTree")) {
+			if (restore_send_component(restore, client, build_identity, "DeviceTree") < 0) {
+				error("ERROR: Unable to send DeviceTree\n");
 				return -1;
 			}
 		}
@@ -2325,12 +2448,12 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		message = NULL;
 	}
 
-	if (fdr_control_channel) {
-		fdr_disconnect(fdr_control_channel);
-		if (fdr_thread) {
+	if (thread_alive(fdr_thread)) {
+		if (fdr_control_channel) {
+			fdr_disconnect(fdr_control_channel);
 			thread_join(fdr_thread);
+			fdr_control_channel = NULL;
 		}
-		fdr_control_channel = NULL;
 	}
 
 	restore_client_free(client);

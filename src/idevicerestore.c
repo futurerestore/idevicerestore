@@ -296,8 +296,9 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	}
 
 	// discover the device type
-	if (check_hardware_model(client) == NULL || client->device == NULL) {
-		error("ERROR: Unable to discover device model\n");
+	client->device = get_irecv_device(client);
+	if (client->device == NULL) {
+		error("ERROR: Unable to discover device type\n");
 		return -1;
 	}
 	idevicerestore_progress(client, RESTORE_STEP_DETECT, 0.2);
@@ -595,6 +596,104 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	build_identity_print_information(build_identity);
 
 	idevicerestore_progress(client, RESTORE_STEP_PREPARE, 0.0);
+
+	// Get filesystem name from build identity
+	char* fsname = NULL;
+	if (build_identity_get_component_path(build_identity, "OS", &fsname) < 0) {
+		error("ERROR: Unable get path for filesystem component\n");
+		return -1;
+	}
+
+	// check if we already have an extracted filesystem
+	int delete_fs = 0;
+	char* filesystem = NULL;
+	struct stat st;
+	memset(&st, '\0', sizeof(struct stat));
+	char tmpf[1024];
+	if (client->cache_dir) {
+		if (stat(client->cache_dir, &st) < 0) {
+			mkdir_with_parents(client->cache_dir, 0755);
+		}
+		strcpy(tmpf, client->cache_dir);
+		strcat(tmpf, "/");
+		char *ipswtmp = strdup(client->ipsw);
+		strcat(tmpf, basename(ipswtmp));
+		free(ipswtmp);
+	} else {
+		strcpy(tmpf, client->ipsw);
+	}
+	char* p = strrchr((const char*)tmpf, '.');
+	if (p) {
+		*p = '\0';
+	}
+
+	if (stat(tmpf, &st) < 0) {
+		__mkdir(tmpf, 0755);
+	}
+	strcat(tmpf, "/");
+	strcat(tmpf, fsname);
+
+	memset(&st, '\0', sizeof(struct stat));
+	if (stat(tmpf, &st) == 0) {
+		off_t fssize = 0;
+		ipsw_get_file_size(client->ipsw, fsname, &fssize);
+		if ((fssize > 0) && (st.st_size == fssize)) {
+			info("Using cached filesystem from '%s'\n", tmpf);
+			filesystem = strdup(tmpf);
+		}
+	}
+
+	if (!filesystem && !(client->flags & FLAG_SHSHONLY)) {
+		char extfn[1024];
+		strcpy(extfn, tmpf);
+		strcat(extfn, ".extract");
+		char lockfn[1024];
+		strcpy(lockfn, tmpf);
+		strcat(lockfn, ".lock");
+		lock_info_t li;
+
+		lock_file(lockfn, &li);
+		FILE* extf = NULL;
+		if (access(extfn, F_OK) != 0) {
+			extf = fopen(extfn, "w");
+		}
+		unlock_file(&li);
+		if (!extf) {
+			// use temp filename
+			filesystem = tempnam(NULL, "ipsw_");
+			if (!filesystem) {
+				error("WARNING: Could not get temporary filename, using '%s' in current directory\n", fsname);
+				filesystem = strdup(fsname);
+			}
+			delete_fs = 1;
+		} else {
+			// use <fsname>.extract as filename
+			filesystem = strdup(extfn);
+			fclose(extf);
+		}
+		remove(lockfn);
+
+		// Extract filesystem from IPSW
+		info("Extracting filesystem from IPSW\n");
+		if (ipsw_extract_to_file_with_progress(client->ipsw, fsname, filesystem, 1) < 0) {
+			error("ERROR: Unable to extract filesystem from IPSW\n");
+			if (client->tss)
+				plist_free(client->tss);
+			plist_free(buildmanifest);
+			return -1;
+		}
+
+		if (strstr(filesystem, ".extract")) {
+			// rename <fsname>.extract to <fsname>
+			remove(tmpf);
+			rename(filesystem, tmpf);
+			free(filesystem);
+			filesystem = strdup(tmpf); 
+		}
+	}
+
+	idevicerestore_progress(client, RESTORE_STEP_PREPARE, 0.2);
+
 	/* retrieve shsh blobs if required */
 	if (tss_enabled) {
 		debug("Getting device's ECID for TSS request\n");
@@ -624,7 +723,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			}
 		}
 
-        if ((client->flags & FLAG_OTAMANIFEST ? get_tss_response(client, build_identity2, &client->tss) : get_tss_response(client, build_identity, &client->tss)) < 0) {
+		if (get_tss_response(client, build_identity, &client->tss) < 0) {
 			error("ERROR: Unable to get SHSH blobs for this device\n");
 			return -1;
 		}
@@ -683,102 +782,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		/* fix empty dicts */
 		fixup_tss(client->tss);
 	}
-	idevicerestore_progress(client, RESTORE_STEP_PREPARE, 0.1);
-
-	// Get filesystem name from build identity
-	char* fsname = NULL;
-	if (build_identity_get_component_path(build_identity, "OS", &fsname) < 0) {
-		error("ERROR: Unable get path for filesystem component\n");
-		return -1;
-	}
-
-	// check if we already have an extracted filesystem
-	int delete_fs = 0;
-	char* filesystem = NULL;
-	struct stat st;
-	memset(&st, '\0', sizeof(struct stat));
-	char tmpf[1024];
-	if (client->cache_dir) {
-		if (stat(client->cache_dir, &st) < 0) {
-			mkdir_with_parents(client->cache_dir, 0755);
-		}
-		strcpy(tmpf, client->cache_dir);
-		strcat(tmpf, "/");
-		char *ipswtmp = strdup(client->ipsw);
-		strcat(tmpf, basename(ipswtmp));
-		free(ipswtmp);
-	} else {
-		strcpy(tmpf, client->ipsw);
-	}
-	char* p = strrchr((const char*)tmpf, '.');
-	if (p) {
-		*p = '\0';
-	}
-
-	if (stat(tmpf, &st) < 0) {
-		__mkdir(tmpf, 0755);
-	}
-	strcat(tmpf, "/");
-	strcat(tmpf, fsname);
-
-	memset(&st, '\0', sizeof(struct stat));
-	if (stat(tmpf, &st) == 0) {
-		off_t fssize = 0;
-		ipsw_get_file_size(client->ipsw, fsname, &fssize);
-		if ((fssize > 0) && (st.st_size == fssize)) {
-			info("Using cached filesystem from '%s'\n", tmpf);
-			filesystem = strdup(tmpf);
-		}
-	}
-
-	if (!filesystem) {
-		char extfn[1024];
-		strcpy(extfn, tmpf);
-		strcat(extfn, ".extract");
-		char lockfn[1024];
-		strcpy(lockfn, tmpf);
-		strcat(lockfn, ".lock");
-		lock_info_t li;
-
-		lock_file(lockfn, &li);
-		FILE* extf = NULL;
-		if (access(extfn, F_OK) != 0) {
-			extf = fopen(extfn, "w");
-		}
-		unlock_file(&li);
-		if (!extf) {
-			// use temp filename
-			filesystem = tempnam(NULL, "ipsw_");
-			if (!filesystem) {
-				error("WARNING: Could not get temporary filename, using '%s' in current directory\n", fsname);
-				filesystem = strdup(fsname);
-			}
-			delete_fs = 1;
-		} else {
-			// use <fsname>.extract as filename
-			filesystem = strdup(extfn);
-			fclose(extf);
-		}
-		remove(lockfn);
-
-		// Extract filesystem from IPSW
-		info("Extracting filesystem from IPSW\n");
-		if (ipsw_extract_to_file_with_progress(client->ipsw, fsname, filesystem, 1) < 0) {
-			error("ERROR: Unable to extract filesystem from IPSW\n");
-			if (client->tss)
-				plist_free(client->tss);
-			plist_free(buildmanifest);
-			return -1;
-		}
-
-		if (strstr(filesystem, ".extract")) {
-			// rename <fsname>.extract to <fsname>
-			remove(tmpf);
-			rename(filesystem, tmpf);
-			free(filesystem);
-			filesystem = strdup(tmpf); 
-		}
-	}
+	idevicerestore_progress(client, RESTORE_STEP_PREPARE, 0.25);
 
 	// if the device is in normal mode, place device into recovery mode
 	if (client->mode->index == MODE_NORMAL) {
@@ -937,8 +941,8 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	if (delete_fs && filesystem)
 		unlink(filesystem);
 
-	/* special handling of AppleTVs */
-	if (strncmp(client->device->product_type, "AppleTV", 7) == 0) {
+	/* special handling of older AppleTVs as they enter Recovery mode on boot when plugged in to USB */
+	if ((strncmp(client->device->product_type, "AppleTV", 7) == 0) && (client->device->product_type[7] < '5')) {
 		if (recovery_client_new(client) == 0) {
 			if (recovery_set_autoboot(client, 1) == 0) {
 				recovery_send_reset(client);
@@ -1242,8 +1246,7 @@ int check_mode(struct idevicerestore_client_t* client) {
 	return mode;
 }
 
-const char* check_hardware_model(struct idevicerestore_client_t* client) {
-	const char* hw_model = NULL;
+irecv_device_t get_irecv_device(struct idevicerestore_client_t *client) {
 	int mode = MODE_UNKNOWN;
 
 	if (client->mode) {
@@ -1252,26 +1255,18 @@ const char* check_hardware_model(struct idevicerestore_client_t* client) {
 
 	switch (mode) {
 	case MODE_RESTORE:
-		hw_model = restore_check_hardware_model(client);
-		break;
+		return restore_get_irecv_device(client);
 
 	case MODE_NORMAL:
-		hw_model = normal_check_hardware_model(client);
-		break;
+		return normal_get_irecv_device(client);
 
 	case MODE_DFU:
 	case MODE_RECOVERY:
-		hw_model = dfu_check_hardware_model(client);
-		break;
+		return dfu_get_irecv_device(client);
+
 	default:
-		break;
+		return NULL;
 	}
-
-	if (hw_model != NULL) {
-		irecv_devices_get_device_by_hardware_model(hw_model, &client->device);
-	}
-
-	return hw_model;
 }
 
 int is_image4_supported(struct idevicerestore_client_t* client)
@@ -1903,15 +1898,15 @@ void build_identity_print_information(plist_t build_identity) {
 int build_identity_has_component(plist_t build_identity, const char* component) {
 	plist_t manifest_node = plist_dict_get_item(build_identity, "Manifest");
 	if (!manifest_node || plist_get_node_type(manifest_node) != PLIST_DICT) {
-		return -1;
+		return 0;
 	}
 
 	plist_t component_node = plist_dict_get_item(manifest_node, component);
 	if (!component_node || plist_get_node_type(component_node) != PLIST_DICT) {
-		return -1;
+		return 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 int build_identity_get_component_path(plist_t build_identity, const char* component, char** path) {
