@@ -49,6 +49,7 @@ case "$host_os" in
 	darwin*)
 	;;
 	linux*)
+		GLOBAL_CFLAGS+="-lpthread"
 	;;
 	mingw*)
 		GLOBAL_CFLAGS+="-DWIN32 -D__LITTLE_ENDIAN__=1"
