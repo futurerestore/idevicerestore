@@ -23,8 +23,7 @@ AM_LDADD = $(AC_LDADD)
 
 if NOMAIN
 noinst_LTLIBRARIES = libidevicerestore.la
-
-libidevicerestore_la_SOURCES = idevicerestore.c common.c tss.c fls.c mbn.c img3.c img4.c ipsw.c normal.c dfu.c recovery.c restore.c asr.c fdr.c limera1n.c download.c locking.c socket.c thread.c
+libidevicerestore_la_SOURCES = idevicerestore.c common.c tss.c fls.c mbn.c img3.c img4.c ipsw.c normal.c dfu.c recovery.c restore.c asr.c fdr.c limera1n.c download.c locking.c socket.c thread.c jsmn.c json_plist.c
 libidevicerestore_la_CFLAGS = $(AM_CFLAGS) -DIDEVICERESTORE_NOMAIN
 if WIN32
 libidevicerestore_la_CFLAGS += -DCURL_STATICLIB -DZIP_STATIC
@@ -34,7 +33,6 @@ libidevicerestore_la_LIBADD = $(AM_LDADD)
 
 else
 bin_PROGRAMS = idevicerestore
-
 idevicerestore_SOURCES = idevicerestore.c common.c tss.c fls.c mbn.c img3.c img4.c ipsw.c normal.c dfu.c recovery.c restore.c asr.c fdr.c limera1n.c download.c locking.c socket.c thread.c jsmn.c json_plist.c
 idevicerestore_CFLAGS = $(AM_CFLAGS)
 idevicerestore_LDFLAGS = $(AM_LDFLAGS)
