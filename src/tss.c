@@ -53,7 +53,6 @@ char* ecid_to_string(uint64_t ecid) {
 }
 
 plist_t tss_request_new(plist_t overrides) {
-
 	plist_t request = plist_new_dict();
 
 	plist_dict_set_item(request, "@Locality", plist_new_string("en_US"));
@@ -167,6 +166,7 @@ int tss_parameters_add_from_manifest(plist_t parameters, plist_t build_identity)
 	}
 	node = NULL;
 
+    /* BbCalibationManifestKeyHash */
 	node = plist_dict_get_item(build_identity, "BbCalibrationManifestKeyHash");
 	if (node && plist_get_node_type(node) == PLIST_DATA) {
 		plist_dict_set_item(parameters, "BbCalibrationManifestKeyHash", plist_copy(node));
@@ -564,13 +564,13 @@ int tss_request_add_ap_tags(plist_t request, plist_t parameters, plist_t overrid
 			return -1;
 		}
 
-		/* do not populate BaseBandFirmware, only in basebaseband request */
+		/* do not populate BasebandFirmware, only in baseband request */
 		if ((strcmp(key, "BasebandFirmware") == 0)) {
 			free(key);
 			continue;
 		}
 
-		/* FIXME: only used with diagnostics firmware */
+		/* only used with diagnostics firmware */
 		if (strcmp(key, "Diags") == 0) {
 			free(key);
 			continue;
@@ -602,7 +602,6 @@ int tss_request_add_ap_tags(plist_t request, plist_t parameters, plist_t overrid
 
 		/* finally add entry to request */
 		plist_dict_set_item(request, key, tss_entry);
-
 		free(key);
 	}
 	free(iter);
@@ -639,6 +638,7 @@ int tss_request_add_baseband_tags(plist_t request, plist_t parameters, plist_t o
 	}
 	node = NULL;
 
+    /* BbCalibrationManifestKeyHash */
 	node = plist_dict_get_item(parameters, "BbCalibrationManifestKeyHash");
 	if (node) {
 		plist_dict_set_item(request, "BbCalibrationManifestKeyHash", plist_copy(node));
@@ -818,7 +818,6 @@ int tss_request_add_se_tags(plist_t request, plist_t parameters, plist_t overrid
 
 		/* add entry to request */
 		plist_dict_set_item(request, key, tss_entry);
-
 		free(key);
 	}
 	free(iter);
@@ -1092,7 +1091,6 @@ static size_t tss_write_callback(char* data, size_t size, size_t nmemb, tss_resp
 }
 
 plist_t tss_request_send(plist_t tss_request, const char* server_url_string) {
-
 	if (idevicerestore_debug) {
 		debug_plist(tss_request);
 	}
@@ -1199,6 +1197,10 @@ plist_t tss_request_send(plist_t tss_request, const char* server_url_string) {
 		} else if (status_code == 126) {
 			// An internal error occured, most likely the request was malformed
 			break;
+        /* FIXME: fully fix 128 error; now it's ignored */
+        } else if (status_code == 128) {
+            // Error that occurs when TSS request on certain devices
+            break;
 		} else {
 			error("ERROR: tss_send_request: Unhandled status code %d\n", status_code);
 		}
