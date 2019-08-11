@@ -2,8 +2,8 @@
  * recovery.c
  * Functions for handling idevices in recovery mode
  *
+ * Copyright (c) 2012-2019 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010-2012 Martin Szulecki. All Rights Reserved.
- * Copyright (c) 2012 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -103,6 +103,11 @@ int recovery_check_mode(struct idevicerestore_client_t* client) {
 	irecv_error_t recovery_error = IRECV_E_SUCCESS;
 	int mode = 0;
 
+	if (client->udid && client->ecid == 0) {
+		/* if we have a UDID but no ECID we can't make sure this is the correct device */
+		return -1;
+	}
+
 	irecv_init();
 	recovery_error=irecv_open_with_ecid(&recovery, client->ecid);
 
@@ -119,7 +124,6 @@ int recovery_check_mode(struct idevicerestore_client_t* client) {
 
 	irecv_close(recovery);
 	recovery = NULL;
-
 	return 0;
 }
 
@@ -147,7 +151,6 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 	}
 
 	/* upload data to make device boot restore mode */
-
 	if(client->recovery == NULL) {
 		if (recovery_client_new(client) < 0) {
 			return -1;
@@ -201,20 +204,34 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		error("ERROR: Unable to send AppleLogo\n");
 		return -1;
 	}
+
+    /* send ramdisk and run it */
     if ((client->flags & FLAG_BOOT) == 0) {
-        /* send ramdisk and run it */
         if (recovery_send_ramdisk(client, build_identity) < 0) {
             error("ERROR: Unable to send Ramdisk\n");
             return -1;
         }
     }
     
+	/* send components loaded by iBoot */
+	if (recovery_send_loaded_by_iboot(client, build_identity) < 0) {
+		error("ERROR: Unable to send components supposed to be loaded by iBoot\n");
+		return -1;
+	}
+
+	/* send ramdisk and run it */
+	if (recovery_send_ramdisk(client, build_identity) < 0) {
+		error("ERROR: Unable to send Ramdisk\n");
+		return -1;
+	}
+
 	/* send devicetree and load it */
 	if (recovery_send_devicetree(client, build_identity) < 0) {
 		error("ERROR: Unable to send DeviceTree\n");
 		return -1;
 	}
     
+    /* send kernelcache and load it */
 	if (recovery_send_kernelcache(client, build_identity) < 0) {
 		error("ERROR: Unable to send KernelCache\n");
 		return -1;
@@ -293,7 +310,6 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
     }else{
         client->recovery_custom_component_function(client,build_identity,component, &data, &size);
     }
-
 	info("Sending %s (%d bytes)...\n", component, size);
 
 	// FIXME: Did I do this right????
@@ -387,6 +403,52 @@ int recovery_send_devicetree(struct idevicerestore_client_t* client, plist_t bui
 	return 0;
 }
 
+int recovery_send_loaded_by_iboot(struct idevicerestore_client_t* client, plist_t build_identity) {
+	if (client->recovery == NULL) {
+		if (recovery_client_new(client) < 0) {
+			return -1;
+		}
+	}
+
+	plist_t manifest_node = plist_dict_get_item(build_identity, "Manifest");
+	if (!manifest_node || plist_get_node_type(manifest_node) != PLIST_DICT) {
+		error("ERROR: Unable to find manifest node\n");
+		return -1;
+	}
+
+	plist_dict_iter iter = NULL;
+	plist_dict_new_iter(manifest_node, &iter);
+	int err = 0;
+	while (iter) {
+		char *key = NULL;
+		plist_t node = NULL;
+		plist_dict_next_item(manifest_node, iter, &key, &node);
+		if (key == NULL)
+			break;
+		plist_t iboot_node = plist_access_path(node, 2, "Info", "IsLoadedByiBoot");
+		if (iboot_node && plist_get_node_type(iboot_node) == PLIST_BOOLEAN) {
+			uint8_t b = 0;
+			plist_get_bool_val(iboot_node, &b);
+			if (b) {
+				debug("DEBUG: %s is loaded by iBoot.\n", key);
+				if (recovery_send_component(client, build_identity, key) < 0) {
+					error("ERROR: Unable to send component '%s' to device.\n", key);
+					err++;
+				} else {
+					if (irecv_send_command(client->recovery->client, "firmware") != IRECV_E_SUCCESS) {
+						error("ERROR: iBoot command 'firmware' failed for component '%s'\n", key);
+						err++;
+					}
+				}
+			}
+		}
+		free(key);
+	}
+	free(iter);
+
+	return (err) ? -1 : 0;
+}
+
 int recovery_send_ramdisk(struct idevicerestore_client_t* client, plist_t build_identity) {
 	const char *component = "RestoreRamDisk";
 	irecv_error_t recovery_error = IRECV_E_SUCCESS;
@@ -417,7 +479,6 @@ int recovery_send_ramdisk(struct idevicerestore_client_t* client, plist_t build_
 	}
 
 	sleep(2);
-
 	return 0;
 }
 
@@ -469,7 +530,6 @@ int recovery_get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
 	}
 
 	*ecid = device_info->ecid;
-
 	return 0;
 }
 
@@ -542,4 +602,3 @@ int recovery_send_reset(struct idevicerestore_client_t* client)
 	irecv_send_command(client->recovery->client, "reset");
 	return 0;
 }
-

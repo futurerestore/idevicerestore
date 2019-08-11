@@ -2,8 +2,8 @@
  * common.c
  * Misc functions used in idevicerestore
  *
+ * Copyright (c) 2012-2019 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2012 Martin Szulecki. All Rights Reserved.
- * Copyright (c) 2012 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -28,9 +28,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <errno.h>
 #include <libgen.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <ctype.h>
+
+#ifdef WIN32
+#include <windows.h>
+#include <conio.h>
+#ifndef _O_EXCL
+#define _O_EXCL  0x0400
+#endif
+#ifndef O_EXCL
+#define O_EXCL   _O_EXCL
+#endif
+#else
+#include <sys/time.h>
+#include <pthread.h>
+#include <termios.h>
+#endif
 
 #include "common.h"
 
@@ -162,6 +181,8 @@ int read_file(const char* filename, void** data, size_t* size) {
 	size_t length = 0;
 	FILE* file = NULL;
 	char* buffer = NULL;
+	struct stat fst;
+
 	debug("Reading data from %s\n", filename);
 
 	*size = 0;
@@ -169,13 +190,15 @@ int read_file(const char* filename, void** data, size_t* size) {
 
 	file = fopen(filename, "rb");
 	if (file == NULL) {
-		error("read_file: File %s not found\n", filename);
+		error("read_file: cannot open %s: %s\n", filename, strerror(errno));
 		return -1;
 	}
 
-	fseeko(file, 0, SEEK_END);
-	length = ftello(file);
-	rewind(file);
+	if (fstat(fileno(file), &fst) < 0) {
+		error("read_file: fstat: %s\n", strerror(errno));
+		return -1;
+	}
+	length = fst.st_size;
 
 	buffer = (char*) malloc(length);
 	if (buffer == NULL) {
@@ -275,6 +298,168 @@ int mkdir_with_parents(const char *dir, int mode)
 	return res;
 }
 
+#ifndef HAVE_MKSTEMP
+/* Based on libc's __gen_tempname() from sysdeps/posix/tempname.c
+   Copyright (C) 1991-2018 Free Software Foundation, Inc.
+   With changes from https://stackoverflow.com/a/6036308 and some
+   additional changes. */
+int mkstemp(char *tmpl)
+{
+	static const char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	int len;
+	char *XXXXXX;
+	static unsigned long long value;
+	unsigned long long random_time_bits;
+	unsigned int count;
+	int fd = -1;
+	int save_errno = errno;
+
+	/* A lower bound on the number of temporary files to attempt to
+	   generate.  The maximum total number of temporary file names that
+	   can exist for a given template is 62**6.  It should never be
+	   necessary to try all these combinations.  Instead if a reasonable
+	   number of names is tried (we define reasonable as 62**3) fail to
+	   give the system administrator the chance to remove the problems.  */
+#define ATTEMPTS_MIN (62 * 62 * 62)
+
+	/* The number of times to attempt to generate a temporary file.  To
+	   conform to POSIX, this must be no smaller than TMP_MAX.  */
+#if ATTEMPTS_MIN < TMP_MAX
+	unsigned int attempts = TMP_MAX;
+#else
+	unsigned int attempts = ATTEMPTS_MIN;
+#endif
+
+	len = strlen (tmpl);
+	if (len < 6 || strcmp (&tmpl[len - 6], "XXXXXX"))
+	{
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* This is where the Xs start.  */
+	XXXXXX = &tmpl[len - 6];
+
+	/* Get some more or less random data.  */
+#ifdef WIN32
+	{
+		SYSTEMTIME stNow;
+		FILETIME ftNow;
+
+		// get system time
+		GetSystemTime(&stNow);
+		if (!SystemTimeToFileTime(&stNow, &ftNow))
+		{
+			errno = -1;
+			return -1;
+		}
+
+		random_time_bits = (((unsigned long long)ftNow.dwHighDateTime << 32)
+		                    | (unsigned long long)ftNow.dwLowDateTime);
+	}
+	value += random_time_bits ^ ((unsigned long long)GetCurrentProcessId() << 32 | (unsigned long long)GetCurrentThreadId());
+#else
+	{
+		struct timeval tvNow = {0, 0};
+		gettimeofday(&tvNow, NULL);
+		random_time_bits = (((unsigned long long)tvNow.tv_sec << 32)
+		                    | (unsigned long long)tvNow.tv_usec);
+	}
+	value += random_time_bits ^ ((unsigned long long)getpid() << 32 | (unsigned long long)(uintptr_t)pthread_self());
+#endif
+
+	for (count = 0; count < attempts; value += 7777, ++count)
+	{
+		unsigned long long v = value;
+
+		/* Fill in the random bits.  */
+		XXXXXX[0] = letters[v % 62];
+		v /= 62;
+		XXXXXX[1] = letters[v % 62];
+		v /= 62;
+		XXXXXX[2] = letters[v % 62];
+		v /= 62;
+		XXXXXX[3] = letters[v % 62];
+		v /= 62;
+		XXXXXX[4] = letters[v % 62];
+		v /= 62;
+		XXXXXX[5] = letters[v % 62];
+
+#ifdef WIN32
+		fd = open (tmpl, O_RDWR | O_CREAT | O_EXCL, _S_IREAD | _S_IWRITE);
+#else
+		fd = open (tmpl, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+#endif
+		if (fd >= 0)
+		{
+			errno = save_errno;
+			return fd;
+		}
+		else if (errno != EEXIST)
+			return -1;
+	}
+
+	/* We got out of the loop because we ran out of combinations to try.  */
+	errno = EEXIST;
+	return -1;
+}
+#endif
+
+char *get_temp_filename(const char *prefix)
+{
+	char *result = NULL;
+	char *tmpdir;
+	size_t lt;
+	size_t lp;
+	const char *TMPVARS[] = { "TMPDIR", "TMP", "TEMP", "TEMPDIR", NULL };
+	int i = 0;
+	int fd;
+
+	/* check the prefix parameter */
+	if (!prefix) {
+		prefix = "tmp_";
+	}
+#ifdef WIN32
+	if (strchr(prefix, '/') || strchr(prefix, '\\')) return NULL;
+#else
+	if (strchr(prefix, '/')) return NULL;
+#endif
+
+	while (TMPVARS[i] && ((tmpdir = getenv(TMPVARS[i])) == NULL)) i++;
+	if (!tmpdir || access(tmpdir, W_OK|X_OK) != 0) {
+#ifdef WIN32
+		tmpdir = "C:\\WINDOWS\\TEMP";
+#else
+		tmpdir = P_tmpdir;
+#endif
+	}
+	if (!tmpdir || access(tmpdir, W_OK|X_OK) != 0) {
+		return NULL;
+	}
+
+	lt = strlen(tmpdir);
+	if (lt < 1) {
+		return NULL;
+	}
+	lp = strlen(prefix);
+	result = malloc(lt + lp + 8);
+	strncpy(result, tmpdir, lt);
+#ifdef WIN32
+	if (tmpdir[lt-1] != '/' && tmpdir[lt-1] != '\\') result[lt++] = '\\';
+#else
+	if (tmpdir[lt-1] != '/') result[lt++] = '/';
+#endif
+	strncpy(result + lt, prefix, lp);
+	strcpy(result + lt + lp, "XXXXXX");
+	fd = mkstemp(result);
+	if (fd < 0) {
+		free(result);
+		result = NULL;
+	}
+	close(fd);
+	return result;
+}
+
 void idevicerestore_progress(struct idevicerestore_client_t* client, int step, double progress)
 {
 	if(client && client->progress_cb) {
@@ -299,3 +484,66 @@ char* strsep(char** strp, const char* delim)
         return s;
 }
 #endif
+
+#ifndef HAVE_REALPATH
+char* realpath(const char *filename, char *resolved_name)
+{
+#ifdef WIN32
+	if (access(filename, F_OK) != 0) {
+		return NULL;
+	}
+	if (GetFullPathName(filename, MAX_PATH, resolved_name, NULL) == 0) {
+		return NULL;
+	}
+	return resolved_name;
+#else
+#error please provide a realpath implementation for this platform
+	return NULL;
+#endif
+}
+#endif
+
+#ifdef WIN32
+#define BS_CC '\b'
+#define my_getch getch
+#else
+#define BS_CC 0x7f
+static int my_getch(void)
+{
+	struct termios oldt, newt;
+	int ch;
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	ch = getchar();
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	return ch;
+}
+#endif
+
+void get_user_input(char *buf, int maxlen, int secure)
+{
+	int len = 0;
+	int c;
+
+	while ((c = my_getch()) > 0) {
+		if ((c == '\r') || (c == '\n')) {
+			break;
+		} else if (isprint(c)) {
+			if (len < maxlen-1)
+				buf[len++] = c;
+			fputc((secure) ? '*' : c, stdout);
+		} else if (c == BS_CC) {
+			if (len > 0) {
+				fputs("\b \b", stdout);
+				len--;
+			}
+		}
+	}
+	if (c < 0) {
+		len = 0;
+	}
+	fputs("\n", stdout);
+	buf[len] = 0;
+}

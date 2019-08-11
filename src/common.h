@@ -2,8 +2,8 @@
  * common.h
  * Misc functions used in idevicerestore
  *
+ * Copyright (c) 2012-2019 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2012 Martin Szulecki. All Rights Reserved.
- * Copyright (c) 2012 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -131,6 +131,7 @@ char *generate_guid(void);
 
 #ifdef WIN32
 #include <windows.h>
+#include <unistd.h>
 #define __mkdir(path, mode) mkdir(path)
 #define FMT_qu "%I64u"
 #ifndef sleep
@@ -144,11 +145,19 @@ char *generate_guid(void);
 
 int mkdir_with_parents(const char *dir, int mode);
 
+char *get_temp_filename(const char *prefix);
+
 void idevicerestore_progress(struct idevicerestore_client_t* client, int step, double progress);
 
 #ifndef HAVE_STRSEP
 char* strsep(char** strp, const char* delim);
 #endif
+
+#ifndef HAVE_REALPATH
+char* realpath(const char *filename, char *resolved_name);
+#endif
+
+void get_user_input(char *buf, int maxlen, int secure);
 
 #ifdef __cplusplus
 }
