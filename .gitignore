@@ -34,3 +34,4 @@ mkinstalldirs
 py-compile
 stamp-h1
 swig/*
+*.orig

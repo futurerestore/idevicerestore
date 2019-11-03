@@ -52,6 +52,7 @@
 #endif
 
 #include "common.h"
+#include "endianness.h"
 
 #define MAX_PRINT_LEN 64*1024
 
@@ -505,7 +506,9 @@ char* realpath(const char *filename, char *resolved_name)
 
 #ifdef WIN32
 #define BS_CC '\b'
-#define my_getch getch
+#define CTRL_C_CC 0x03
+#define ESC_CC 0x1B
+#define my_getch _getch
 #else
 #define BS_CC 0x7f
 static int my_getch(void)
@@ -540,10 +543,105 @@ void get_user_input(char *buf, int maxlen, int secure)
 				len--;
 			}
 		}
+#ifdef WIN32
+		else if (c == CTRL_C_CC || c == ESC_CC) {
+			c = -1;
+			break;
+		}
+#endif
 	}
 	if (c < 0) {
 		len = 0;
 	}
 	fputs("\n", stdout);
 	buf[len] = 0;
+}
+
+uint64_t _plist_dict_get_uint(plist_t dict, const char *key)
+{
+	uint64_t uintval = 0;
+	char *strval = NULL;
+	uint64_t strsz = 0;
+	plist_t node = plist_dict_get_item(dict, key);
+	if (!node) {
+		return (uint64_t)-1LL;
+	}
+	switch (plist_get_node_type(node)) {
+	case PLIST_UINT:
+		plist_get_uint_val(node, &uintval);
+		break;
+	case PLIST_STRING:
+		plist_get_string_val(node, &strval);
+		if (strval) {
+			uintval = strtoull(strval, NULL, 0);
+			free(strval);
+		}
+		break;
+	case PLIST_DATA:
+		plist_get_data_val(node, &strval, &strsz);
+		if (strval) {
+			if (strsz == 8) {
+				uintval = le64toh(*(uint64_t*)strval);
+			} else if (strsz == 4) {
+				uintval = le32toh(*(uint32_t*)strval);
+			} else if (strsz == 2) {
+				uintval = le16toh(*(uint16_t*)strval);
+			} else if (strsz == 1) {
+				uintval = strval[0];
+			} else {
+				error("%s: ERROR: invalid size %d for data to integer conversion\n", __func__, strsz);
+			}
+			free(strval);
+		}
+		break;
+	default:
+		break;
+	}
+	return uintval;
+}
+
+uint8_t _plist_dict_get_bool(plist_t dict, const char *key)
+{
+	uint8_t bval = 0;
+	uint64_t uintval = 0;
+	char *strval = NULL;
+	uint64_t strsz = 0;
+	plist_t node = plist_dict_get_item(dict, key);
+	if (!node) {
+		return 0;
+	}
+	switch (plist_get_node_type(node)) {
+	case PLIST_BOOLEAN:
+		plist_get_bool_val(node, &bval);
+		break;
+	case PLIST_UINT:
+		plist_get_uint_val(node, &uintval);
+		bval = (uint8_t)uintval;
+		break;
+	case PLIST_STRING:
+		plist_get_string_val(node, &strval);
+		if (strval) {
+			if (strcmp(strval, "true")) {
+				bval = 1;
+			} else if (strcmp(strval, "false")) {
+				bval = 0;
+			}
+			free(strval);
+		}
+		break;
+	case PLIST_DATA:
+		plist_get_data_val(node, &strval, &strsz);
+		if (strval) {
+			if (strsz == 1) {
+				bval = strval[0];
+			} else {
+				error("%s: ERROR: invalid size %d for data to boolean conversion\n", __func__, strsz);
+			}
+			free(strval);
+		}
+		break;
+	default:
+		break;
+	}
+	return bval;
 }

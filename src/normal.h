@@ -2,8 +2,8 @@
  * normal.h
  * Functions for handling idevices in normal mode
  *
+ * Copyright (c) 2012-2019 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2012 Martin Szulecki. All Rights Reserved.
- * Copyright (c) 2012-2015 Nikias Bassen. All Rights Reserved.
  * Copyright (c) 2010 Joshua Hill. All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -32,25 +32,17 @@ extern "C" {
 #include <libimobiledevice/lockdown.h>
 #include <libimobiledevice/libimobiledevice.h>
 
-struct normal_client_t {
-	idevice_t device;
-	lockdownd_client_t client;
-	const char* ipsw;
-	plist_t tss;
-};
-
-
 int normal_check_mode(struct idevicerestore_client_t* client);
 irecv_device_t normal_get_irecv_device(struct idevicerestore_client_t* client);
-int normal_client_new(struct idevicerestore_client_t* client);
-void normal_client_free(struct idevicerestore_client_t* client);
-int normal_open_with_timeout(struct idevicerestore_client_t* client);
 int normal_enter_recovery(struct idevicerestore_client_t* client);
 int normal_get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid);
 int normal_is_image4_supported(struct idevicerestore_client_t* client);
 int normal_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size);
 int normal_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size);
 int normal_get_preflight_info(struct idevicerestore_client_t* client, plist_t *preflight_info);
+plist_t normal_get_lockdown_value(struct idevicerestore_client_t* client, const char* domain, const char* key);
+int normal_handle_create_stashbag(struct idevicerestore_client_t* client, plist_t manifest);
+int normal_handle_commit_stashbag(struct idevicerestore_client_t* client, plist_t manifest);
 
 #ifdef __cplusplus
 }

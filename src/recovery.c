@@ -219,12 +219,6 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		return -1;
 	}
 
-	/* send ramdisk and run it */
-	if (recovery_send_ramdisk(client, build_identity) < 0) {
-		error("ERROR: Unable to send Ramdisk\n");
-		return -1;
-	}
-
 	/* send devicetree and load it */
 	if (recovery_send_devicetree(client, build_identity) < 0) {
 		error("ERROR: Unable to send DeviceTree\n");
@@ -232,12 +226,25 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 	}
     
     /* send kernelcache and load it */
+
+	mutex_lock(&client->device_event_mutex);
 	if (recovery_send_kernelcache(client, build_identity) < 0) {
+		mutex_unlock(&client->device_event_mutex);
 		error("ERROR: Unable to send KernelCache\n");
 		return -1;
 	}
 
-	if ((client->flags & FLAG_BOOT) == 0 && (client->flags & FLAG_NOBOOTX) == 0) client->mode = &idevicerestore_modes[MODE_RESTORE];
+    if ((client->flags & FLAG_NOBOOTX) == 0){
+        debug("DEBUG: Waiting for device to disconnect...\n");
+        cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 30000);
+        if (client->mode == &idevicerestore_modes[MODE_RECOVERY] || (client->flags & FLAG_QUIT)) {
+            mutex_unlock(&client->device_event_mutex);
+            error("ERROR: Failed to place device in restore mode\n");
+            return -1;
+        }
+        mutex_unlock(&client->device_event_mutex);
+    }
+
 	return 0;
 }
 
