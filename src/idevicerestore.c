@@ -209,7 +209,7 @@ static int compare_versions(const char *s_ver1, const char *s_ver2)
 	return (get_version_num(s_ver1) & 0xFFFF00) - (get_version_num(s_ver2) & 0xFFFF00);
 }
 
-static void idevice_event_cb(const idevice_event_t *event, void *userdata)
+void idevice_event_cb(const idevice_event_t *event, void *userdata)
 {
 	struct idevicerestore_client_t *client = (struct idevicerestore_client_t*)userdata;
 	if (event->event == IDEVICE_DEVICE_ADD) {
@@ -241,7 +241,7 @@ static void idevice_event_cb(const idevice_event_t *event, void *userdata)
 	}
 }
 
-static void irecv_event_cb(const irecv_device_event_t* event, void *userdata)
+void irecv_event_cb(const irecv_device_event_t* event, void *userdata)
 {
 	struct idevicerestore_client_t *client = (struct idevicerestore_client_t*)userdata;
 	if (event->type == IRECV_DEVICE_ADD) {
