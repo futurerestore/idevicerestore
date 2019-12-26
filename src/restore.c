@@ -2597,7 +2597,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	idevice_t device = NULL;
 	restored_client_t restore = NULL;
 	restored_error_t restore_error = RESTORE_E_SUCCESS;
-	thread_t fdr_thread = (thread_t)NULL;
+	THREAD_T fdr_thread = (THREAD_T)NULL;
 	restore_finished = 0;
 
 	// open our connection to the device and verify we're in restore mode
@@ -2691,7 +2691,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	if (!fdr_connect(device, FDR_CTRL, &fdr_control_channel)) {
 		if(thread_new(&fdr_thread, fdr_listener_thread, fdr_control_channel)) {
 			error("ERROR: Failed to start FDR listener thread\n");
-			fdr_thread = (thread_t)NULL; /* undefined after failure */
+			fdr_thread = (THREAD_T)NULL; /* undefined after failure */
 		}
 	} else {
 		error("ERROR: Failed to start FDR Ctrl channel\n");

@@ -415,7 +415,7 @@ static int fdr_handle_sync_cmd(fdr_client_t fdr_ctrl)
 {
 	idevice_error_t device_error = IDEVICE_E_SUCCESS;
 	fdr_client_t fdr;
-	thread_t fdr_thread = (thread_t)NULL;
+	THREAD_T fdr_thread = (THREAD_T)NULL;
 	int res = 0;
 	uint32_t bytes = 0;
 	char buf[4096];
