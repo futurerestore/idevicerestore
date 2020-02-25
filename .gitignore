@@ -30,7 +30,8 @@ m4/*
 main
 missing
 mkinstalldirs
-*Makefile*
+Makefile
+Makefile.in
 py-compile
 stamp-h1
 swig/*
