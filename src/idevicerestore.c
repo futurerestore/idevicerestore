@@ -69,14 +69,16 @@ static struct option longopts[] = {
 	{ "keep-pers",   no_argument,        NULL,  'k' },
 	{ "pwn",         no_argument,        NULL,  'p' },
 	{ "no-action",   no_argument,        NULL,  'n' },
+	{ "cache-path",  required_argument,  NULL,  'C' },
     { "downgrade",   no_argument,        NULL,  'w' },
-    { "cache-path",  required_argument,  NULL,  'C' },
     { "otamanifest", required_argument,  NULL,  'o' },
     { "boot",        no_argument,        NULL,  'b' },
     { "paniclog",    no_argument,        NULL,  'g' },
     { "nobootx",     no_argument,        NULL,  'b' },
-	{ "cache-path",  required_argument,  NULL,  'C' },
 	{ "no-input",    no_argument,        NULL,  'y' },
+	{ "plain-progress", no_argument, NULL, 'P' },
+	{ "restore-mode", no_argument,  NULL, 'R' },
+	{ "ticket", required_argument,  NULL, 'T' },
 	{ NULL, 0, NULL, 0 }
 };
 
@@ -122,7 +124,10 @@ static void usage(int argc, char* argv[], int err)
 	" -p, --pwn             Put device in pwned DFU mode and exit (limera1n devices only)\n" \
     " -b, --boot            just boot tethered (limera1n devices only)\n" \
     "     --nobootx         Doesn't run \"bootx\" command\n" \
-    " -g, --paniclog        Boot restore ramdisk, print paniclog (if available) and reboot\n\n" \
+    " -g, --paniclog        Boot restore ramdisk, print paniclog (if available) and reboot\n" \
+	" -P, --plain-progress  Print progress as plain step and progress\n" \
+	" -R, --restore-mode  Allow restoring from Restore mode\n" \
+	" -T, --ticket PATH   Use file at PATH to send as AP ticket\n\n" \
 	"Homepage: <" PACKAGE_URL ">\n",
 	(name ? name + 1 : argv[0]));
 }
@@ -563,21 +568,29 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	}
 
 	if (client->mode->index == MODE_RESTORE) {
-		if (restore_reboot(client) < 0) {
-			error("ERROR: Unable to exit restore mode\n");
-			return -2;
-		}
+		if (client->flags & FLAG_ALLOW_RESTORE_MODE) {
+			tss_enabled = 0;
+			if (!client->root_ticket) {
+				client->root_ticket = (void*)strdup("");
+				client->root_ticket_len = 0;
+			}
+		} else {
+			if (restore_reboot(client) < 0) {
+				error("ERROR: Unable to exit restore mode\n");
+				return -2;
+			}
 
-		// we need to refresh the current mode again
-		mutex_lock(&client->device_event_mutex);
-		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 60000);
-		if (client->mode == &idevicerestore_modes[MODE_UNKNOWN] || (client->flags & FLAG_QUIT)) {
+			// we need to refresh the current mode again
+			mutex_lock(&client->device_event_mutex);
+			cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 60000);
+			if (client->mode == &idevicerestore_modes[MODE_UNKNOWN] || (client->flags & FLAG_QUIT)) {
+				mutex_unlock(&client->device_event_mutex);
+				error("ERROR: Unable to discover device mode. Please make sure a device is attached.\n");
+				return -1;
+			}
+			info("Found device in %s mode\n", client->mode->string);
 			mutex_unlock(&client->device_event_mutex);
-			error("ERROR: Unable to discover device mode. Please make sure a device is attached.\n");
-			return -1;
 		}
-		info("Found device in %s mode\n", client->mode->string);
-		mutex_unlock(&client->device_event_mutex);
 	}
 
 	// verify if ipsw file exists
@@ -1328,17 +1341,19 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	}
 	idevicerestore_progress(client, RESTORE_STEP_PREPARE, 0.9);
 
-	mutex_lock(&client->device_event_mutex);
-	info("Waiting for device to enter restore mode...\n");
-	cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 180000);
-	if (client->mode != &idevicerestore_modes[MODE_RESTORE] || (client->flags & FLAG_QUIT)) {
+	if (client->mode->index != MODE_RESTORE) {
+		mutex_lock(&client->device_event_mutex);
+		info("Waiting for device to enter restore mode...\n");
+		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 180000);
+		if (client->mode != &idevicerestore_modes[MODE_RESTORE] || (client->flags & FLAG_QUIT)) {
+			mutex_unlock(&client->device_event_mutex);
+			error("ERROR: Device failed to enter restore mode.\n");
+			if (delete_fs && filesystem)
+				unlink(filesystem);
+			return -1;
+		}
 		mutex_unlock(&client->device_event_mutex);
-		error("ERROR: Device failed to enter restore mode.\n");
-		if (delete_fs && filesystem)
-			unlink(filesystem);
-		return -1;
 	}
-	mutex_unlock(&client->device_event_mutex);
 
 	// device is finally in restore mode, let's do this
 	if (client->mode->index == MODE_RESTORE) {
@@ -1447,6 +1462,9 @@ void idevicerestore_client_free(struct idevicerestore_client_t* client)
 	if (client->cache_dir) {
 		free(client->cache_dir);
 	}
+	if (client->root_ticket) {
+		free(client->root_ticket);
+	}
 	free(client);
 }
 
@@ -1522,6 +1540,12 @@ static void handle_signal(int sig)
 	}
 }
 
+void plain_progress_cb(int step, double step_progress, void* userdata)
+{
+	printf("progress: %u %f\n", step, step_progress);
+	fflush(stdout);
+}
+
 int main(int argc, char* argv[]) {
 	int opt = 0;
 	int optindex = 0;
@@ -1557,7 +1581,7 @@ int main(int argc, char* argv[]) {
 		client->flags |= FLAG_INTERACTIVE;
 	}
 
-    while ((opt = getopt_long(argc, argv, "dhcesxtplibgo:u:nC:wky", longopts, &optindex)) > 0) {
+    while ((opt = getopt_long(argc, argv, "dhcesxtplibgo:u:nC:wkyPRT", longopts, &optindex)) > 0) {
 		switch (opt) {
 		case 'h':
 			usage(argc, argv, 0);
@@ -1651,6 +1675,25 @@ int main(int argc, char* argv[]) {
 			client->flags &= ~FLAG_INTERACTIVE;
 			break;
 
+		case 'P':
+			idevicerestore_set_progress_callback(client, plain_progress_cb, NULL);
+			break;
+
+		case 'R':
+			client->flags |= FLAG_ALLOW_RESTORE_MODE;
+			break;
+
+		case 'T': {
+			size_t root_ticket_len = 0;
+			unsigned char* root_ticket = NULL;
+			if (read_file(optarg, (void**)&root_ticket, &root_ticket_len) != 0) {
+				return -1;
+			}
+			client->root_ticket = root_ticket;
+			client->root_ticket_len = (int)root_ticket_len;
+			info("Using ApTicket found at %s length %u\n", optarg, client->root_ticket_len);
+			break;
+		}
 		default:
 			usage(argc, argv, 1);
 			return -1;
@@ -1745,6 +1788,9 @@ int is_image4_supported(struct idevicerestore_client_t* client)
 	switch (mode) {
 	case MODE_NORMAL:
 		res = normal_is_image4_supported(client);
+		break;
+	case MODE_RESTORE:
+		res = restore_is_image4_supported(client);
 		break;
 	case MODE_DFU:
 		res = dfu_is_image4_supported(client);
