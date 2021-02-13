@@ -70,7 +70,7 @@ case ${host_os} in
 esac
 AM_CONDITIONAL(WIN32, test x$win32 = xtrue)
 
-AC_CHECK_FUNCS([strsep strcspn mkstemp realpath])
+AC_CHECK_FUNCS([strsep strcspn realpath])
 if test x$ac_cv_func_strsep != xyes; then
   if test x$ac_cv_func_strcspn != xyes; then
     AC_MSG_ERROR([You need either strsep or strcspn to build $PACKAGE])

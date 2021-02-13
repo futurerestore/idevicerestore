@@ -985,7 +985,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		unlock_file(&li);
 		if (!extf) {
 			// use temp filename
-			filesystem = get_temp_filename("ipsw_");
+			filesystem = tempnam(NULL, "ipsw_");
 			if (!filesystem) {
 				error("WARNING: Could not get temporary filename, using '%s' in current directory\n", fsname);
 				filesystem = strdup(fsname);
