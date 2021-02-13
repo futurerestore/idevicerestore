@@ -414,7 +414,7 @@ int img3_stitch_component(const char* component_name, const unsigned char* compo
 	}
 
 	info("Personalizing IMG3 component %s...\n", component_name);
-	
+
 	/* parse current component as img3 */
 	img3 = img3_parse_file(component_data, component_size);
 	if (img3 == NULL) {
@@ -440,7 +440,7 @@ int img3_stitch_component(const char* component_name, const unsigned char* compo
 	}
 
 	if (((img3_element_header*)blob)->full_size != blob_size) {
-		error("ERROR: Invalid blob passed for %s IMG3: The size %d embedded in the blob does not match the passed size of %d\n", component_name, ((img3_element_header*)blob)->full_size, blob_size, component_name);
+		error("ERROR: Invalid blob passed for %s IMG3: The size %d embedded in the blob does not match the passed size of %d\n", component_name, ((img3_element_header*)blob)->full_size, blob_size);
 		img3_free(img3);
 		return -1;
 	}

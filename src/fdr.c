@@ -154,7 +154,7 @@ int fdr_poll_and_handle_message(fdr_client_t fdr)
 	}
 	else if (device_error != IDEVICE_E_SUCCESS) {
 		if (fdr->connection) {
-			error("ERROR: Unable to receive message from FDR %p (%d). %u/%d bytes\n", fdr, device_error, bytes, sizeof(cmd));
+			error("ERROR: Unable to receive message from FDR %p (%d). %u/%u bytes\n", fdr, device_error, bytes, (uint32_t)sizeof(cmd));
 		}
 		return -1;
 	}
@@ -246,8 +246,8 @@ static int fdr_send_plist(fdr_client_t fdr, plist_t data)
 		debug_plist(data);
 	device_error = idevice_connection_send(fdr->connection, (char *)&len, sizeof(len), &bytes);
 	if (device_error != IDEVICE_E_SUCCESS || bytes != sizeof(len)) {
-		error("ERROR: FDR unable to send data length. (%d) Sent %u of %u bytes.\n", 
-		      device_error, bytes, sizeof(len));
+		error("ERROR: FDR unable to send data length. (%d) Sent %u of %u bytes.\n",
+		      device_error, bytes, (uint32_t)sizeof(len));
 		free(buf);
 		return -1;
 	}
@@ -276,7 +276,7 @@ static int fdr_ctrl_handshake(fdr_client_t fdr)
 
 	device_error = idevice_connection_send(fdr->connection, CTRLCMD, len, &bytes);
 	if (device_error != IDEVICE_E_SUCCESS || bytes != len) {
-		debug("Hmm... lookes like the device doesn't like the newer protocol, using the old one\n");
+		debug("Hmm... looks like the device doesn't like the newer protocol, using the old one\n");
 		ctrlprotoversion = 1;
 		len = sizeof(HELLOCTRLCMD);
 		device_error = idevice_connection_send(fdr->connection, HELLOCTRLCMD, len, &bytes);
@@ -340,7 +340,7 @@ static int fdr_ctrl_handshake(fdr_client_t fdr)
 		conn_port = le16toh(cport);
 	}
 
-	debug("Ctrl handshake done (ConnPort = %u)\n", conn_port);
+	debug("Ctrl handshake done (ConnPort = %" PRIu64 ")\n", (uint64_t)conn_port);
 
 	return 0;
 }
@@ -514,7 +514,7 @@ static int fdr_handle_proxy_cmd(fdr_client_t fdr)
 	if (device_error != IDEVICE_E_SUCCESS || sent != sizeof(ack)) {
 		free(buf);
 		error("ERROR: FDR %p unable to send ack. Sent %u of %u bytes.\n",
-		      fdr, sent, sizeof(ack));
+		      fdr, sent, (uint32_t)sizeof(ack));
 		return -1;
 	}
 

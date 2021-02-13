@@ -32,7 +32,15 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <zip.h>
+#ifdef HAVE_OPENSSL
 #include <openssl/sha.h>
+#else
+#include "sha1.h"
+#define SHA_CTX SHA1_CTX
+#define SHA1_Init SHA1Init
+#define SHA1_Update SHA1Update
+#define SHA1_Final SHA1Final
+#endif
 
 #include "ipsw.h"
 #include "locking.h"
@@ -61,9 +69,9 @@ static char* build_path(const char* path, const char* file)
 	if (!fullpath) {
 		return NULL;
 	}
-	strncpy(fullpath, path, plen);
+	memcpy(fullpath, path, plen);
 	fullpath[plen] = '/';
-	strncpy(fullpath+plen+1, file, flen);
+	memcpy(fullpath+plen+1, file, flen);
 	fullpath[plen+1+flen] = '\0';
 	return fullpath;
 }
@@ -576,7 +584,7 @@ int ipsw_get_latest_fw(plist_t version_data, const char* product, char** fwurl, 
 		return -1;
 	}
 	char* key = NULL;
-	long long unsigned int major = 0;
+	uint64_t major = 0;
 	plist_t val = NULL;
 	do {
 		plist_dict_next_item(n1, iter, &key, &val);
@@ -598,7 +606,7 @@ int ipsw_get_latest_fw(plist_t version_data, const char* product, char** fwurl, 
 	}
 
 	char majstr[32]; // should be enough for a uint64_t value
-	sprintf(majstr, FMT_qu, (long long unsigned int)major);
+	sprintf(majstr, "%"PRIu64, (uint64_t)major);
 	n1 = plist_access_path(version_data, 7, "MobileDeviceSoftwareVersionsByVersion", majstr, "MobileDeviceSoftwareVersions", product, "Unknown", "Universal", "Restore");
 	if (!n1) {
 		error("%s: ERROR: Can't get Unknown/Universal/Restore node?!\n", __func__);
@@ -704,14 +712,14 @@ int ipsw_download_fw(const char *fwurl, unsigned char* isha1, const char* todir,
 	}
 	fwfn++;
 
-	char fwlfn[256];
+	char fwlfn[PATH_MAX - 5];
 	if (todir) {
 		sprintf(fwlfn, "%s/%s", todir, fwfn);
 	} else {
 		sprintf(fwlfn, "%s", fwfn);
 	}
 
-	char fwlock[256];
+	char fwlock[PATH_MAX];
 	sprintf(fwlock, "%s.lock", fwlfn);
 
 	lock_info_t lockinfo;

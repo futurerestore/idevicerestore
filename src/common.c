@@ -244,7 +244,7 @@ void print_progress_bar(double progress) {
 		else info(" ");
 	}
 	info("] %5.1f%%", progress);
-	if(progress == 100) info("\n");
+	if(progress >= 100) info("\n");
 	fflush((info_stream) ? info_stream : stdout);
 #endif
 }
@@ -290,7 +290,7 @@ int mkdir_with_parents(const char *dir, int mode)
 	if (parentdir && (strcmp(parentdir, ".") != 0) && (strcmp(parentdir, dir) != 0)) {
 		res = mkdir_with_parents(parentdir, mode);
 	} else {
-		res = -1;	
+		res = -1;
 	}
 	free(parent);
 	if (res == 0) {
@@ -444,7 +444,7 @@ char *get_temp_filename(const char *prefix)
 	}
 	lp = strlen(prefix);
 	result = malloc(lt + lp + 8);
-	strncpy(result, tmpdir, lt);
+	memcpy(result, tmpdir, lt);
 #ifdef WIN32
 	if (tmpdir[lt-1] != '/' && tmpdir[lt-1] != '\\') result[lt++] = '\\';
 #else
@@ -468,7 +468,7 @@ void idevicerestore_progress(struct idevicerestore_client_t* client, int step, d
 	} else {
 		// we don't want to be too verbose in regular idevicerestore.
 		if ((step == RESTORE_STEP_UPLOAD_FS) || (step == RESTORE_STEP_VERIFY_FS) || (step == RESTORE_STEP_FLASH_FW)) {
-			print_progress_bar(100.0f * progress);
+			print_progress_bar(100.0 * progress);
 		}
 	}
 }
@@ -589,7 +589,7 @@ uint64_t _plist_dict_get_uint(plist_t dict, const char *key)
 			} else if (strsz == 1) {
 				uintval = strval[0];
 			} else {
-				error("%s: ERROR: invalid size %d for data to integer conversion\n", __func__, strsz);
+				error("%s: ERROR: invalid size %" PRIu64 " for data to integer conversion\n", __func__, strsz);
 			}
 			free(strval);
 		}
@@ -635,7 +635,7 @@ uint8_t _plist_dict_get_bool(plist_t dict, const char *key)
 			if (strsz == 1) {
 				bval = strval[0];
 			} else {
-				error("%s: ERROR: invalid size %d for data to boolean conversion\n", __func__, strsz);
+				error("%s: ERROR: invalid size %" PRIu64 " for data to boolean conversion\n", __func__, strsz);
 			}
 			free(strval);
 		}

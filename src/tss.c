@@ -50,7 +50,7 @@ char* ecid_to_string(uint64_t ecid) {
 		error("ERROR: Invalid ECID passed.\n");
 		return NULL;
 	}
-	snprintf(ecid_string, ECID_STRSIZE, FMT_qu, (long long unsigned int)ecid);
+	snprintf(ecid_string, ECID_STRSIZE, "%"PRIu64, ecid);
 	return ecid_string;
 }
 
@@ -630,8 +630,12 @@ int tss_request_add_ap_tags(plist_t request, plist_t parameters, plist_t overrid
 
 		if (_plist_dict_get_bool(parameters, "_OnlyFWComponents")) {
 			plist_t info_dict = plist_dict_get_item(manifest_entry, "Info");
-			if (!_plist_dict_get_bool(manifest_entry, "Trusted") && !_plist_dict_get_bool(info_dict, "IsFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsSecondaryFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsFUDFirmware")) {
-				debug("DEBUG: %s: Skipping '%s' as it is neither firmware nor secondary firmware payload\n", __func__, key);
+			if (!_plist_dict_get_bool(manifest_entry, "Trusted")) {
+				debug("DEBUG: %s: Skipping '%s' as it is not trusted", __func__, key);
+				continue;
+			}
+			if (!_plist_dict_get_bool(info_dict, "IsFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsSecondaryFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsFUDFirmware")) {
+				debug("DEBUG: %s: Skipping '%s' as it is neither firmware nor secondary nor FUD firmware payload\n", __func__, key);
 				continue;
 			}
 		}
@@ -1426,7 +1430,7 @@ plist_t tss_request_send(plist_t tss_request, const char* server_url_string) {
 
 		response = malloc(sizeof(tss_response));
 		if (response == NULL) {
-			fprintf(stderr, "Unable to allocate sufficent memory\n");
+			fprintf(stderr, "Unable to allocate sufficient memory\n");
 			return NULL;
 		}
 
@@ -1457,7 +1461,7 @@ plist_t tss_request_send(plist_t tss_request, const char* server_url_string) {
 		curl_easy_perform(handle);
 		curl_slist_free_all(header);
 		curl_easy_cleanup(handle);
-	
+
 		if (strstr(response->content, "MESSAGE=SUCCESS")) {
 			status_code = 0;
 			info("response successfully received\n");

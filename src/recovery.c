@@ -35,7 +35,7 @@
 #include "restore.h"
 #include "recovery.h"
 
-int recovery_progress_callback(irecv_client_t client, const irecv_event_t* event) {
+static int recovery_progress_callback(irecv_client_t client, const irecv_event_t* event) {
 	if (event->type == IRECV_PROGRESS) {
 		//print_progress_bar(event->progress);
 	}
@@ -252,7 +252,7 @@ int recovery_send_ticket(struct idevicerestore_client_t* client)
 {
 	if (!client->tss) {
 		error("ERROR: ApTicket requested but no TSS present\n");
-		return -1;		
+		return -1;
 	}
 
 	unsigned char* data = NULL;
@@ -279,7 +279,8 @@ int recovery_send_ticket(struct idevicerestore_client_t* client)
 	return 0;
 }
 
-int recovery_send_component(struct idevicerestore_client_t* client, plist_t build_identity, const char* component) {
+int recovery_send_component(struct idevicerestore_client_t* client, plist_t build_identity, const char* component)
+{
 	unsigned int size = 0;
 	unsigned char* data = NULL;
 	char* path = NULL;
@@ -414,7 +415,8 @@ int recovery_send_devicetree(struct idevicerestore_client_t* client, plist_t bui
 	return 0;
 }
 
-int recovery_send_loaded_by_iboot(struct idevicerestore_client_t* client, plist_t build_identity) {
+int recovery_send_loaded_by_iboot(struct idevicerestore_client_t* client, plist_t build_identity)
+{
 	if (client->recovery == NULL) {
 		if (recovery_client_new(client) < 0) {
 			return -1;
