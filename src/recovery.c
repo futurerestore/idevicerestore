@@ -449,11 +449,6 @@ int recovery_send_loaded_by_iboot(struct idevicerestore_client_t* client, plist_
 				if (recovery_send_component_and_command(client, build_identity, key, "firmware") < 0) {
 					error("ERROR: Unable to send component '%s' to device.\n", key);
 					err++;
-				} else {
-					if (irecv_send_command(client->recovery->client, "firmware") != IRECV_E_SUCCESS) {
-						error("ERROR: iBoot command 'firmware' failed for component '%s'\n", key);
-						err++;
-					}
 				}
 			}
 		}
