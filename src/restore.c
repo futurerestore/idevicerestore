@@ -2259,50 +2259,6 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 	plist_t node = NULL;
 	int ret;
 
-	/* create Rose request */
-	request = tss_request_new(NULL);
-	if (request == NULL) {
-		error("ERROR: Unable to create Rose TSS request\n");
-		free(component_data);
-		return NULL;
-	}
-
-	parameters = plist_new_dict();
-
-	/* add manifest for current build_identity to parameters */
-	tss_parameters_add_from_manifest(parameters, build_identity);
-
-	plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
-	if (client->image4supported) {
-		plist_dict_set_item(parameters, "ApSecurityMode", plist_new_bool(1));
-		plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(1));
-	} else {
-		plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(0));
-	}
-
-	/* add Rap,* tags from info dictionary to parameters */
-	plist_dict_merge(&parameters, p_info);
-
-	/* add required tags for Rose TSS request */
-	tss_request_add_rose_tags(request, parameters, NULL);
-
-	plist_free(parameters);
-
-	info("Sending Rose TSS request...\n");
-	response = tss_request_send(request, client->tss_url);
-	plist_free(request);
-	if (response == NULL) {
-		error("ERROR: Unable to fetch Rose ticket\n");
-		free(component_data);
-		return NULL;
-	}
-
-	if (plist_dict_get_item(response, "Rap,Ticket")) {
-		info("Received Rose ticket\n");
-	} else {
-		error("ERROR: No 'Rap,Ticket' in TSS response, this might not work\n");
-	}
-
 	comp_name = "Rap,RTKitOS";
 	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
@@ -2369,14 +2325,63 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 		info("NOTE: Build identity does not have a '%s' component.\n", comp_name);
 	}
 
+	/* create Rose request */
+	if (plist_dict_get_item(client->tss, "Rap,Ticket")) {
+		info("Received Rose ticket\n");
+		response = client->tss;
+	} else
+	{
+		info("WARNING: No 'Rap,Ticket' in tss, fetching a new ticket using build identity\n");
+		request = tss_request_new(NULL);
+		if (request == NULL) {
+			error("ERROR: Unable to create Rose TSS request\n");
+			free(component_data);
+			return NULL;
+		}
+
+		parameters = plist_new_dict();
+
+		/* add manifest for current build_identity to parameters */
+		tss_parameters_add_from_manifest(parameters, build_identity);
+
+		plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
+		if (client->image4supported) {
+			plist_dict_set_item(parameters, "ApSecurityMode", plist_new_bool(1));
+			plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(1));
+		} else {
+			plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(0));
+		}
+
+		/* add Rap,* tags from info dictionary to parameters */
+		plist_dict_merge(&parameters, p_info);
+
+		/* add required tags for Rose TSS request */
+		tss_request_add_rose_tags(request, parameters, NULL);
+
+		plist_free(parameters);
+
+		info("Sending Rose TSS request...\n");
+		response = tss_request_send(request, client->tss_url);
+		plist_free(request);
+		if (response == NULL) {
+			error("ERROR: Unable to fetch Rose ticket\n");
+			free(component_data);
+			return NULL;
+		}
+
+		if (plist_dict_get_item(response, "Rap,Ticket")) {
+			info("Received Rose ticket\n");
+		} else {
+			error("ERROR: No 'Rap,Ticket' in TSS response, this might not work\n");
+		}
+	}
+	
 	ftab_write(ftab, &component_data, &component_size);
 	ftab_free(ftab);
-
 	plist_dict_set_item(response, "FirmwareData", plist_new_data((char *)component_data, (uint64_t)component_size));
 	free(component_data);
 	component_data = NULL;
 	component_size = 0;
-
 	return response;
 }
 

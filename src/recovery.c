@@ -225,9 +225,15 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		return -1;
 	}
 
-	if (build_identity_has_component(build_identity, "RestoreSEP")) {
+	if (build_identity_has_component(build_identity, "RestoreDCP") && build_identity_has_component(build_identity, "RestoreSEP")) {
 		/* send rsepfirmware and load it */
 		if (recovery_send_component_and_command(client, build_identity, "RestoreSEP", "rsepfirmware") < 0) {
+			error("ERROR: Unable to send RestoreSEP\n");
+			return -1;
+		}
+	}
+	else {
+		if (recovery_send_component_and_command(client, build_identity, "RestoreSEP", "firmware") < 0) {
 			error("ERROR: Unable to send RestoreSEP\n");
 			return -1;
 		}
