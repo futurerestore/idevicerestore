@@ -100,6 +100,7 @@ struct idevicerestore_client_t {
 	char* udid;
 	char* srnm;
 	char* ipsw;
+	char* ipsw2;
 	const char* filesystem;
 	struct dfu_client_t* dfu;
 	struct restore_client_t* restore;

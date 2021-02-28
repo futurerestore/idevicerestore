@@ -1992,6 +1992,7 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 	plist_t request = NULL;
 	plist_t response = NULL;
 	int ret;
+	int latestManifest = 0;
 	uint64_t chip_id = 0;
 	plist_t node = plist_dict_get_item(p_info, "SE,ChipID");
 	if (node && plist_get_node_type(node) == PLIST_UINT) {
@@ -2012,19 +2013,6 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 			return NULL;
 		}
 		debug("DEBUG: %s: using %s\n", __func__, comp_name);
-	}
-
-	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
-		error("ERROR: Unable to get path for '%s' component\n", comp_name);
-		return NULL;
-	}
-
-	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-	free(comp_path);
-	comp_path = NULL;
-	if (ret < 0) {
-		error("ERROR: Unable to extract '%s' component\n", comp_name);
-		return NULL;
 	}
 
 	/* create SE request */
@@ -2050,9 +2038,45 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
-		error("ERROR: Unable to fetch SE ticket\n");
-		free(component_data);
-		return NULL;
+		info("Warning: Unable to fetch SE ticket using current build_identity, trying again using latest build manifest\n");
+		latestManifest = 1;
+		/* create SE request */
+		request = tss_request_new(NULL);
+		if (request == NULL) {
+			error("ERROR: Unable to create SE TSS request\n");
+			free(component_data);
+			return NULL;
+		}
+
+		parameters = plist_new_dict();
+
+		/* add manifest for current build_identity to parameters */
+		if(!client->basebandBuildIdentity) {
+			error("ERROR: Unable to fetch Savage ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		if(!client->ipsw2) {
+			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+		/* add SE,* tags from info dictionary to parameters */
+		plist_dict_merge(&parameters, p_info);
+		/* add required tags for SE TSS request */
+		tss_request_add_se_tags(request, parameters, NULL);
+
+		plist_free(parameters);
+
+		info("Sending SE TSS request...\n");
+		response = tss_request_send(request, client->tss_url);
+		plist_free(request);
+		if (response == NULL) {
+			error("ERROR: Unable to fetch SE ticket a second time even using latest build manifest, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
 	}
 
 	if (plist_dict_get_item(response, "SE,Ticket")) {
@@ -2061,11 +2085,32 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 		error("ERROR: No 'SE,Ticket' in TSS response, this might not work\n");
 	}
 
+	plist_t tmp_identity = NULL;
+	if(latestManifest == 1)
+		tmp_identity = plist_copy(client->basebandBuildIdentity);
+	else
+		tmp_identity = plist_copy(build_identity);
+	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
+		error("ERROR: Unable to get path for '%s' component\n", comp_name);
+		return NULL;
+	}
+
+	if(latestManifest == 1)
+		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
+	else
+		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	free(comp_path);
+	comp_path = NULL;
+	if (ret < 0) {
+		error("ERROR: Unable to extract '%s' component\n", comp_name);
+		return NULL;
+	}
+
 	plist_dict_set_item(response, "FirmwareData", plist_new_data((char*)component_data, (uint64_t) component_size));
 	free(component_data);
 	component_data = NULL;
 	component_size = 0;
-
+	plist_free(tmp_identity);
 	return response;
 }
 
@@ -2081,6 +2126,7 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 	plist_t response = NULL;
 	plist_t node = NULL;
 	int ret;
+	int latestManifest = 0;
 
 	/* create Savage request */
 	request = tss_request_new(NULL);
@@ -2111,9 +2157,51 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
-		error("ERROR: Unable to fetch Savage ticket\n");
-		free(comp_name);
-		return NULL;
+		info("Warning: Unable to fetch Savage ticket using current build_identity, trying again using latest build manifest\n");
+		latestManifest = 1;
+		/* create Savage request */
+		request = tss_request_new(NULL);
+		if (request == NULL) {
+			error("ERROR: Unable to create Savage TSS request\n");
+			return NULL;
+		}
+
+		parameters = plist_new_dict();
+
+		/* add manifest for current build_identity to parameters */
+		if(!client->basebandBuildIdentity) {
+			error("ERROR: Unable to fetch Savage ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		if(!client->ipsw2) {
+			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+		/* add Savage,* tags from info dictionary to parameters */
+		plist_dict_merge(&parameters, p_info);
+		/* add required tags for Savage TSS request */
+		tss_request_add_savage_tags(request, parameters, NULL, &comp_name);
+
+		plist_free(parameters);
+
+		if (!comp_name) {
+			error("ERROR: Could not determine Savage firmware component\n");
+			plist_free(request);
+			return NULL;
+		}
+		debug("DEBUG: %s: using %s\n", __func__, comp_name);
+
+		info("Sending Savage TSS request...\n");
+		response = tss_request_send(request, client->tss_url);
+		plist_free(request);
+		if (response == NULL) {
+			error("ERROR: Unable to fetch Savage ticket a second time even using latest build manifest, this is not normal, RIPERONI :(\n");
+			free(comp_name);
+			return NULL;
+		}
 	}
 
 	if (plist_dict_get_item(response, "Savage,Ticket")) {
@@ -2123,13 +2211,21 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 	}
 
 	/* now get actual component data */
-	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+	plist_t tmp_identity = NULL;
+	if(latestManifest == 1)
+		tmp_identity = plist_copy(client->basebandBuildIdentity);
+	else
+		tmp_identity = plist_copy(build_identity);
+	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		free(comp_name);
 		return NULL;
 	}
 
-	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	if(latestManifest == 1)
+		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
+	else
+		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2155,7 +2251,7 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 	free(component_data);
 	component_data = NULL;
 	component_size = 0;
-
+	plist_free(tmp_identity);
 	return response;
 }
 
@@ -2258,13 +2354,108 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 	plist_t response = NULL;
 	plist_t node = NULL;
 	int ret;
+	int latestManifest = 0;
+
+	/* create Rose request */
+	request = tss_request_new(NULL);
+	if (request == NULL) {
+		error("ERROR: Unable to create Rose TSS request\n");
+		free(component_data);
+		return NULL;
+	}
+
+	parameters = plist_new_dict();
+
+	/* add manifest for current build_identity to parameters */
+	tss_parameters_add_from_manifest(parameters, build_identity);
+
+	plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
+	if (client->image4supported) {
+		plist_dict_set_item(parameters, "ApSecurityMode", plist_new_bool(1));
+		plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(1));
+	} else {
+		plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(0));
+	}
+
+	/* add Rap,* tags from info dictionary to parameters */
+	plist_dict_merge(&parameters, p_info);
+
+	/* add required tags for Rose TSS request */
+	tss_request_add_rose_tags(request, parameters, NULL);
+
+	plist_free(parameters);
+
+	info("Sending Rose TSS request...\n");
+	response = tss_request_send(request, client->tss_url);
+	plist_free(request);
+	if (response == NULL) {
+		info("Warning: Unable to fetch Rose ticket using current build_identity, trying again using latest build manifest\n");
+		latestManifest = 1;
+		/* create Rose request */
+		request = tss_request_new(NULL);
+
+		parameters = plist_new_dict();
+
+		/* add manifest for latest build manifest to parameters */
+		if(!client->basebandBuildIdentity) {
+			error("ERROR: Unable to fetch Rose ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		if(!client->ipsw2) {
+			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+
+		plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
+		if (client->image4supported) {
+			plist_dict_set_item(parameters, "ApSecurityMode", plist_new_bool(1));
+			plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(1));
+		} else {
+			plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(0));
+		}
+
+		/* add Rap,* tags from info dictionary to parameters */
+		plist_dict_merge(&parameters, p_info);
+
+		/* add required tags for Rose TSS request */
+		tss_request_add_rose_tags(request, parameters, NULL);
+
+		plist_free(parameters);
+
+		info("Sending Rose TSS request...\n");
+		response = tss_request_send(request, client->tss_url);
+		plist_free(request);
+
+		if (response == NULL) {
+			error("ERROR: Unable to fetch Rose ticket a second time even using latest build manifest, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+	}
+
+	if (plist_dict_get_item(response, "Rap,Ticket")) {
+		info("Received Rose ticket\n");
+	} else {
+		error("ERROR: No 'Rap,Ticket' in TSS response, this might not work\n");
+	}
 
 	comp_name = "Rap,RTKitOS";
-	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+	plist_t tmp_identity = NULL;
+	if(latestManifest == 1)
+		tmp_identity = plist_copy(client->basebandBuildIdentity);
+	else
+		tmp_identity = plist_copy(build_identity);
+	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		return NULL;
 	}
-	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	if(latestManifest == 1)
+		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
+	else
+		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2284,13 +2475,16 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 	}
 
 	comp_name = "Rap,RestoreRTKitOS";
-	if (build_identity_has_component(build_identity, comp_name)) {
-		if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+	if (build_identity_has_component(tmp_identity, comp_name)) {
+		if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 			ftab_free(ftab);
 			error("ERROR: Unable to get path for '%s' component\n", comp_name);
 			return NULL;
 		}
-		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+		if(latestManifest == 1)
+			ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
+		else
+			ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
 		free(comp_path);
 		comp_path = NULL;
 		if (ret < 0) {
@@ -2324,57 +2518,6 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 	} else {
 		info("NOTE: Build identity does not have a '%s' component.\n", comp_name);
 	}
-
-	/* create Rose request */
-	if (plist_dict_get_item(client->tss, "Rap,Ticket")) {
-		info("Received Rose ticket\n");
-		response = client->tss;
-	} else
-	{
-		info("WARNING: No 'Rap,Ticket' in tss, fetching a new ticket using build identity\n");
-		request = tss_request_new(NULL);
-		if (request == NULL) {
-			error("ERROR: Unable to create Rose TSS request\n");
-			free(component_data);
-			return NULL;
-		}
-
-		parameters = plist_new_dict();
-
-		/* add manifest for current build_identity to parameters */
-		tss_parameters_add_from_manifest(parameters, build_identity);
-
-		plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
-		if (client->image4supported) {
-			plist_dict_set_item(parameters, "ApSecurityMode", plist_new_bool(1));
-			plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(1));
-		} else {
-			plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(0));
-		}
-
-		/* add Rap,* tags from info dictionary to parameters */
-		plist_dict_merge(&parameters, p_info);
-
-		/* add required tags for Rose TSS request */
-		tss_request_add_rose_tags(request, parameters, NULL);
-
-		plist_free(parameters);
-
-		info("Sending Rose TSS request...\n");
-		response = tss_request_send(request, client->tss_url);
-		plist_free(request);
-		if (response == NULL) {
-			error("ERROR: Unable to fetch Rose ticket\n");
-			free(component_data);
-			return NULL;
-		}
-
-		if (plist_dict_get_item(response, "Rap,Ticket")) {
-			info("Received Rose ticket\n");
-		} else {
-			error("ERROR: No 'Rap,Ticket' in TSS response, this might not work\n");
-		}
-	}
 	
 	ftab_write(ftab, &component_data, &component_size);
 	ftab_free(ftab);
@@ -2382,6 +2525,7 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 	free(component_data);
 	component_data = NULL;
 	component_size = 0;
+	plist_free(tmp_identity);
 	return response;
 }
 
@@ -2397,6 +2541,7 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 	plist_t response = NULL;
 	plist_t node = NULL;
 	int ret;
+	int latestManifest = 0;
 
 	/* create Veridian request */
 	request = tss_request_new(NULL);
@@ -2423,9 +2568,47 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
-		error("ERROR: Unable to fetch Veridian ticket\n");
-		free(component_data);
-		return NULL;
+		info("Warning: Unable to fetch Rose ticket using current build_identity, trying again using latest build manifest\n");
+		latestManifest = 1;
+		/* create Veridian request */
+		request = tss_request_new(NULL);
+		if (request == NULL) {
+			error("ERROR: Unable to create Veridian TSS request\n");
+			free(component_data);
+			return NULL;
+		}
+
+		parameters = plist_new_dict();
+
+		/* add manifest for current build_identity to parameters */
+		if(!client->basebandBuildIdentity) {
+			error("ERROR: Unable to fetch Veridian ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		if(!client->ipsw2) {
+			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
+		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+
+		/* add BMU,* tags from info dictionary to parameters */
+		plist_dict_merge(&parameters, p_info);
+
+		/* add required tags for Veridian TSS request */
+		tss_request_add_veridian_tags(request, parameters, NULL);
+
+		plist_free(parameters);
+
+		info("Sending Veridian TSS request...\n");
+		response = tss_request_send(request, client->tss_url);
+		plist_free(request);
+		if (response == NULL) {
+			error("ERROR: Unable to fetch Veridian ticket a second time even using latest build manifest, this is not normal, RIPERONI :(\n");
+			free(component_data);
+			return NULL;
+		}
 	}
 
 	if (plist_dict_get_item(response, "BMU,Ticket")) {
@@ -2434,13 +2617,21 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 		error("ERROR: No 'BMU,Ticket' in TSS response, this might not work\n");
 	}
 
-	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+	plist_t tmp_identity = NULL;
+	if(latestManifest == 1)
+		tmp_identity = plist_copy(client->basebandBuildIdentity);
+	else
+		tmp_identity = plist_copy(build_identity);
+	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		return NULL;
 	}
 
 	/* now get actual component data */
-	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	if(latestManifest == 1)
+		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
+	else
+		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2463,7 +2654,7 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 		return NULL;
 	}
 
-	plist_t fw_map_digest = plist_access_path(build_identity, 3, "Manifest", comp_name, "Digest");
+	plist_t fw_map_digest = plist_access_path(tmp_identity, 3, "Manifest", comp_name, "Digest");
 	if (!fw_map_digest) {
 		plist_free(fw_map);
 		error("ERROR: Unable to get Digest for '%s' component\n", comp_name);
@@ -2479,7 +2670,7 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 
 	plist_dict_set_item(response, "FirmwareData", plist_new_data(bin_plist, (uint64_t)bin_size));
 	free(bin_plist);
-
+	plist_free(tmp_identity);
 	return response;
 }
 
