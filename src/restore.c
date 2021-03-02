@@ -2056,11 +2056,7 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 			free(component_data);
 			return NULL;
 		}
-		if(!client->ipsw2) {
-			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
-			free(component_data);
-			return NULL;
-		}
+
 		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
 		/* add SE,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
@@ -2095,10 +2091,11 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 		return NULL;
 	}
 
-	if(latestManifest == 1)
-		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
-	else
-		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	if (latestManifest != 1 || !client->sefwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	else{
+		component_data = malloc(component_size = (unsigned int)client->sefwdatasize);
+		memcpy(component_data, client->sefwdata, component_size);
+	}
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2174,11 +2171,7 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 			free(component_data);
 			return NULL;
 		}
-		if(!client->ipsw2) {
-			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
-			free(component_data);
-			return NULL;
-		}
+
 		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
 		/* add Savage,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
@@ -2221,11 +2214,12 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 		free(comp_name);
 		return NULL;
 	}
-
-	if(latestManifest == 1)
-		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
-	else
-		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	extern int savage_num;
+	if (latestManifest != 1 || !client->savagefwdatasize[savage_num]) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	else{
+		component_data = malloc(component_size = (unsigned int)client->savagefwdatasize[savage_num]);
+		memcpy(component_data, client->savagefwdata[savage_num], component_size);
+	}
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2402,11 +2396,7 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 			free(component_data);
 			return NULL;
 		}
-		if(!client->ipsw2) {
-			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
-			free(component_data);
-			return NULL;
-		}
+
 		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
 
 		plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
@@ -2452,10 +2442,11 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		return NULL;
 	}
-	if(latestManifest == 1)
-		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
-	else
-		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	if (latestManifest != 1 || !client->rosefwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	else{
+		component_data = malloc(component_size = (unsigned int)client->rosefwdatasize);
+		memcpy(component_data, client->rosefwdata, component_size);
+	}
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2481,10 +2472,11 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 			error("ERROR: Unable to get path for '%s' component\n", comp_name);
 			return NULL;
 		}
-		if(latestManifest == 1)
-			ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
-		else
-			ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+		if (latestManifest != 1 || !client->rosefwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+		else{
+			component_data = malloc(component_size = (unsigned int)client->rosefwdatasize);
+			memcpy(component_data, client->rosefwdata, component_size);
+		}
 		free(comp_path);
 		comp_path = NULL;
 		if (ret < 0) {
@@ -2586,11 +2578,7 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 			free(component_data);
 			return NULL;
 		}
-		if(!client->ipsw2) {
-			error("ERROR: Firmware ipsw is missing, this is not normal, RIPERONI :(\n");
-			free(component_data);
-			return NULL;
-		}
+
 		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
 
 		/* add BMU,* tags from info dictionary to parameters */
@@ -2628,10 +2616,11 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 	}
 
 	/* now get actual component data */
-	if(latestManifest == 1)
-		ret = extract_component(client->ipsw2, comp_path, &component_data, &component_size);
-	else
-		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	if (latestManifest != 1 || !client->veridianfwmfwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	else{
+		component_data = malloc(component_size = (unsigned int)client->veridianfwmfwdatasize);
+		memcpy(component_data, client->veridianfwmfwdata, component_size);
+	}
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {

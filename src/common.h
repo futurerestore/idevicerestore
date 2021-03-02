@@ -82,6 +82,16 @@ struct idevicerestore_entry_t {
 struct idevicerestore_client_t {
     int flags;
     char *otamanifest;
+	char *rosefwdata;
+	size_t rosefwdatasize;
+	char *sefwdata;
+	size_t sefwdatasize;
+	char *savagefwdata[6];
+	size_t savagefwdatasize[6];
+	char *veridiandgmfwdata;
+	size_t veridiandgmfwdatasize;
+	char *veridianfwmfwdata;
+	size_t veridianfwmfwdatasize;
     char *bbfwtmp;
     char *sepfwdata;
     size_t sepfwdatasize;
@@ -100,7 +110,6 @@ struct idevicerestore_client_t {
 	char* udid;
 	char* srnm;
 	char* ipsw;
-	char* ipsw2;
 	const char* filesystem;
 	struct dfu_client_t* dfu;
 	struct restore_client_t* restore;

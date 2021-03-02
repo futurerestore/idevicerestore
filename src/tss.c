@@ -906,6 +906,8 @@ int tss_request_add_se_tags(plist_t request, plist_t parameters, plist_t overrid
 	return 0;
 }
 
+int savage_num;
+
 int tss_request_add_savage_tags(plist_t request, plist_t parameters, plist_t overrides, char **component_name)
 {
 	plist_t node = NULL;
@@ -989,6 +991,7 @@ int tss_request_add_savage_tags(plist_t request, plist_t parameters, plist_t ove
 
 	/* get the right component name */
 	comp_name = (isprod) ?  "Savage,B0-Prod-Patch" : "Savage,B0-Dev-Patch";
+	savage_num = (isprod) ? 0 : 1;
 	node = plist_dict_get_item(parameters, "Savage,Revision");
 	if (node && (plist_get_node_type(node) == PLIST_DATA)) {
 		unsigned char *savage_rev = NULL;
@@ -997,8 +1000,10 @@ int tss_request_add_savage_tags(plist_t request, plist_t parameters, plist_t ove
 		if (savage_rev_len > 0) {
 			if (((savage_rev[0] | 0x10) & 0xF0) == 0x30) {
 				comp_name = (isprod) ? "Savage,B2-Prod-Patch" : "Savage,B2-Dev-Patch";
+				savage_num = (isprod) ? 2 : 3;
 			} else if ((savage_rev[0] & 0xF0) == 0xA0) {
 				comp_name = (isprod) ? "Savage,BA-Prod-Patch" : "Savage,BA-Dev-Patch";
+				savage_num = (isprod) ? 4 : 5;
 			}
 		}
 		free(savage_rev);
