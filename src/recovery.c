@@ -225,17 +225,37 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		return -1;
 	}
 
-	if (build_identity_has_component(build_identity, "RestoreDCP") && build_identity_has_component(build_identity, "RestoreSEP")) {
+	plist_t tss = plist_copy(client->tss);
+	client->tss = plist_copy(client->septss);
+
+	if ((client->build_major > 8) && !(client->flags & FLAG_CUSTOM)) {
+		if (!client->image4supported) {
+			/* send ApTicket */
+			if (recovery_send_ticket(client) < 0) {
+				error("ERROR: Unable to send APTicket\n");
+				return -1;
+			}
+		}
+	}
+
+	if(build_identity_has_component(build_identity, "RestoreSEP")) {
 		/* send rsepfirmware and load it */
 		if (recovery_send_component_and_command(client, build_identity, "RestoreSEP", "rsepfirmware") < 0) {
 			error("ERROR: Unable to send RestoreSEP\n");
 			return -1;
 		}
 	}
-	else {
-		if (recovery_send_component_and_command(client, build_identity, "RestoreSEP", "firmware") < 0) {
-			error("ERROR: Unable to send RestoreSEP\n");
-			return -1;
+
+	client->tss = plist_copy(tss);
+	plist_free(tss);
+
+	if ((client->build_major > 8) && !(client->flags & FLAG_CUSTOM)) {
+		if (!client->image4supported) {
+			/* send ApTicket */
+			if (recovery_send_ticket(client) < 0) {
+				error("ERROR: Unable to send APTicket\n");
+				return -1;
+			}
 		}
 	}
 
@@ -247,6 +267,7 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		error("ERROR: Unable to send KernelCache\n");
 		return -1;
 	}
+	
 
     if ((client->flags & FLAG_NOBOOTX) == 0){
         debug("DEBUG: Waiting for device to disconnect...\n");
@@ -316,7 +337,20 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
         
         unsigned char* component_data = NULL;
         unsigned int component_size = 0;
-        int ret = extract_component(client->ipsw, path, &component_data, &component_size);
+		int ret = 0;
+		if(strcmp("RestoreSEP", component) == 0 && client->sepfwdatasize) {
+			info("TEST: recovery_send_component: RestoreSEP\n");
+			component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
+			memcpy(component_data, client->sepfwdata, component_size);
+		}
+		// } else if(strcmp("RestoreKernelCache", component) == 0 && client->kerneldatasize) {
+		// 	info("TEST: recovery_send_component: RestoreKernelCache\n");
+		// 	component_data = malloc(component_size = (unsigned int)client->kerneldatasize);
+		// 	memcpy(component_data, client->kerneldata, component_size);
+		// }
+		else
+			ret = extract_component(client->ipsw, path, &component_data, &component_size);
+		 
         free(path);
         if (ret < 0) {
             error("ERROR: Unable to extract component: %s\n", component);
