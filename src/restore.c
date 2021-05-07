@@ -2051,13 +2051,13 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 		parameters = plist_new_dict();
 
 		/* add manifest for current build_identity to parameters */
-		if(!client->basebandBuildIdentity) {
+		if(!client->sepBuildIdentity) {
 			error("ERROR: Unable to fetch SE ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
 		/* add SE,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
 		/* add required tags for SE TSS request */
@@ -2083,7 +2083,7 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 
 	plist_t tmp_identity = NULL;
 	if(latestManifest == 1)
-		tmp_identity = plist_copy(client->basebandBuildIdentity);
+		tmp_identity = plist_copy(client->sepBuildIdentity);
 	else
 		tmp_identity = plist_copy(build_identity);
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
@@ -2166,13 +2166,13 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 		parameters = plist_new_dict();
 
 		/* add manifest for current build_identity to parameters */
-		if(!client->basebandBuildIdentity) {
+		if(!client->sepBuildIdentity) {
 			error("ERROR: Unable to fetch Savage ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
 		/* add Savage,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
 		/* add required tags for Savage TSS request */
@@ -2206,7 +2206,7 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 	/* now get actual component data */
 	plist_t tmp_identity = NULL;
 	if(latestManifest == 1)
-		tmp_identity = plist_copy(client->basebandBuildIdentity);
+		tmp_identity = plist_copy(client->sepBuildIdentity);
 	else
 		tmp_identity = plist_copy(build_identity);
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
@@ -2391,13 +2391,13 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 		parameters = plist_new_dict();
 
 		/* add manifest for latest build manifest to parameters */
-		if(!client->basebandBuildIdentity) {
+		if(!client->sepBuildIdentity) {
 			error("ERROR: Unable to fetch Rose ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
 
 		plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
 		if (client->image4supported) {
@@ -2435,7 +2435,7 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 	comp_name = "Rap,RTKitOS";
 	plist_t tmp_identity = NULL;
 	if(latestManifest == 1)
-		tmp_identity = plist_copy(client->basebandBuildIdentity);
+		tmp_identity = plist_copy(client->sepBuildIdentity);
 	else
 		tmp_identity = plist_copy(build_identity);
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
@@ -2573,13 +2573,13 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 		parameters = plist_new_dict();
 
 		/* add manifest for current build_identity to parameters */
-		if(!client->basebandBuildIdentity) {
+		if(!client->sepBuildIdentity) {
 			error("ERROR: Unable to fetch Veridian ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->basebandBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
 
 		/* add BMU,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
@@ -2607,7 +2607,7 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 
 	plist_t tmp_identity = NULL;
 	if(latestManifest == 1)
-		tmp_identity = plist_copy(client->basebandBuildIdentity);
+		tmp_identity = plist_copy(client->sepBuildIdentity);
 	else
 		tmp_identity = plist_copy(build_identity);
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
