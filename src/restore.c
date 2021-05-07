@@ -2052,7 +2052,7 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 
 		/* add manifest for current build_identity to parameters */
 		if(!client->basebandBuildIdentity) {
-			error("ERROR: Unable to fetch Savage ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			error("ERROR: Unable to fetch SE ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
@@ -2167,7 +2167,7 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 
 		/* add manifest for current build_identity to parameters */
 		if(!client->basebandBuildIdentity) {
-			error("ERROR: Unable to fetch Savage ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			error("ERROR: Unable to fetch Savage ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
@@ -2392,7 +2392,7 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 
 		/* add manifest for latest build manifest to parameters */
 		if(!client->basebandBuildIdentity) {
-			error("ERROR: Unable to fetch Rose ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			error("ERROR: Unable to fetch Rose ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
@@ -2574,7 +2574,7 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 
 		/* add manifest for current build_identity to parameters */
 		if(!client->basebandBuildIdentity) {
-			error("ERROR: Unable to fetch Veridian ticket because latest build manifest is somehow unkown, this is not normal, RIPERONI :(\n");
+			error("ERROR: Unable to fetch Veridian ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
 			free(component_data);
 			return NULL;
 		}
