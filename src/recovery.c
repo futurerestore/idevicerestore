@@ -147,7 +147,7 @@ int recovery_set_autoboot(struct idevicerestore_client_t* client, int enable) {
 
 int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build_identity) {
     if (client->build_major >= 8) {
-		client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress");
+		client->restore_boot_args = strdup("rd=md0 -restore -v debug=0x14e serial=3");
 	}
 
 	/* upload data to make device boot restore mode */
