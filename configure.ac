@@ -14,7 +14,7 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
 # Minimum package versions
-LIBIRECOVERY_VERSION=1.0.0
+LIBIRECOVERY_VERSION=1.0.1
 LIBIMOBILEDEVICE_VERSION=1.3.0
 LIBPLIST_VERSION=2.2.0
 LIBZIP_VERSION=0.8
@@ -41,11 +41,14 @@ PKG_CHECK_MODULES(libimobiledevice, libimobiledevice-1.0 >= $LIBIMOBILEDEVICE_VE
 PKG_CHECK_MODULES(libplist, libplist-2.0 >= $LIBPLIST_VERSION)
 PKG_CHECK_MODULES(libzip, libzip >= $LIBZIP_VERSION)
 PKG_CHECK_MODULES(libcurl, libcurl >= $LIBCURL_VERSION)
-PKG_CHECK_MODULES(openssl, openssl >= $OPENSSL_VERSION)
 PKG_CHECK_MODULES(zlib, zlib >= $ZLIB_VERSION)
 
 # optional
 PKG_CHECK_MODULES(openssl, openssl >= $OPENSSL_VERSION, have_openssl=yes, have_openssl=no)
+
+# Checking endianness
+AC_C_BIGENDIAN([AC_DEFINE([__BIG_ENDIAN__], [1], [big endian])],
+               [AC_DEFINE([__LITTLE_ENDIAN__], [1], [little endian])])
 
 GLOBAL_CFLAGS="-Wno-multichar -O2"
 AC_LDADD=""
@@ -139,7 +142,7 @@ fi
 AC_SUBST(openssl_CFLAGS)
 AC_SUBST(openssl_LIBS)
 
-AM_CONDITIONAL(USE_INTERNAL_SHA1, test x$use_openssl != xyes)
+AM_CONDITIONAL(USE_INTERNAL_SHA, test x$use_openssl != xyes)
 
 AC_SUBST(GLOBAL_CFLAGS)
 AC_SUBST(AC_LDFLAGS)
