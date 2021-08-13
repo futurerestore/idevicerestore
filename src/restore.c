@@ -3394,6 +3394,11 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idev
 		}
 
 		else if (!strcmp(type, "NORData")) {
+		    if (client->flags & FLAG_NO_RESTORE) {
+		        info("Device is now in restore mode. Exiting as requested.\n");
+		        client->flags |= FLAG_QUIT;
+		        return 2;
+		    }
 			if((client->flags & FLAG_EXCLUDE) == 0) {
 				if(restore_send_nor(restore, client, build_identity) < 0) {
 					error("ERROR: Unable to send NOR data\n");
