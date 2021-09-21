@@ -70,7 +70,7 @@ clone [these libraries](https://github.com/libimobiledevice/) separately and rep
 
 Continue with cloning the actual project repository:
 ```shell
-git clone https://github.com/libimobiledevice/idevicerestore.git
+git clone https://github.com/m1stadev/idevicerestore.git
 cd idevicerestore
 ```
 
@@ -134,7 +134,7 @@ ticket first to discuss the idea upfront to ensure less effort for everyone.
 
 Please make sure your contribution adheres to:
 * Try to follow the code style of the project
-* Commit messages should describe the change well without being to short
+* Commit messages should describe the change well without being too short
 * Try to split larger changes into individual commits of a common domain
 * Use your real name and a valid email address for your commits
 
@@ -162,4 +162,4 @@ iPadOS, tvOS, watchOS, and macOS are trademarks of Apple Inc.
 This project is an independent software application and has not been
 authorized, sponsored, or otherwise approved by Apple Inc.
 
-README Updated on: 2020-06-12
+README Updated on: 2021-09-21

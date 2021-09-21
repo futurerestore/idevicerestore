@@ -124,6 +124,7 @@ static void usage(int argc, char* argv[], int err)
 	"  -n, --no-action       Do not perform any restore action. If combined with -l\n" \
 	"                        option the on-demand ipsw download is performed before\n" \
 	"                        exiting.\n" \
+	"  --ipsw-info           Print information about the IPSW at PATH and exit.\n" \
 	"  -h, --help            Prints this usage information\n" \
 	"  -C, --cache-path DIR  Use specified directory for caching extracted or other\n" \
 	"                        reused files.\n" \
