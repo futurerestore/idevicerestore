@@ -37,16 +37,16 @@ extern "C" {
 
 #include <plist/plist.h>
 #include <libirecovery.h>
+#include <libimobiledevice-glue/thread.h>
 
 #include "idevicerestore.h"
-#include "thread.h"
 
-#define MODE_UNKNOWN        -1
-#define MODE_WTF             0
-#define MODE_DFU             1
-#define MODE_RECOVERY        2
-#define MODE_RESTORE         3
-#define MODE_NORMAL          4
+#define MODE_UNKNOWN         0
+#define MODE_WTF             1
+#define MODE_DFU             2
+#define MODE_RECOVERY        3
+#define MODE_RESTORE         4
+#define MODE_NORMAL          5
 
 #define FLAG_QUIT            1
 

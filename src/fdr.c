@@ -28,8 +28,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <libimobiledevice/libimobiledevice.h>
+#include <libimobiledevice-glue/socket.h>
 
-#include "socket.h" /* from libimobiledevice/common */
 #include "common.h"
 #include "idevicerestore.h"
 #include "fdr.h"

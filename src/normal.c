@@ -33,7 +33,7 @@
 #include "common.h"
 #include "normal.h"
 #include "recovery.h"
-#include "thread.h"
+#include <libimobiledevice-glue/thread.h>
 
 static int normal_idevice_new(struct idevicerestore_client_t* client, idevice_t* device)
 {

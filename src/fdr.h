@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #include <libimobiledevice/libimobiledevice.h>
-#include "thread.h" /* from libimobiledevice/common */
+#include <libimobiledevice-glue/thread.h>
 
 typedef enum {
 	FDR_CTRL,
