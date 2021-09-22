@@ -2,6 +2,8 @@
 
 *A command-line application to restore firmware files to iOS devices.*
 
+![](https://github.com/libimobiledevice/idevicerestore/actions/workflows/build.yml/badge.svg)
+
 ## Features
 
 The idevicerestore application is a full reimplementation of all granular steps
@@ -48,6 +50,7 @@ sudo apt-get install \
 	libusb-1.0-0-dev \
 	libplist-dev \
 	libimobiledevice-dev \
+	libimobiledevice-glue-dev \
 	libcurl4-openssl-dev \
 	libssl-dev \
 	libzip-dev \
