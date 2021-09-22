@@ -35,14 +35,16 @@
 #include "restore.h"
 #include "recovery.h"
 
-static int recovery_progress_callback(irecv_client_t client, const irecv_event_t* event) {
+static int recovery_progress_callback(irecv_client_t client, const irecv_event_t* event)
+{
 	if (event->type == IRECV_PROGRESS) {
 		//print_progress_bar(event->progress);
 	}
 	return 0;
 }
 
-void recovery_client_free(struct idevicerestore_client_t* client) {
+void recovery_client_free(struct idevicerestore_client_t* client)
+{
 	if(client) {
 		if (client->recovery) {
 			if(client->recovery->client) {
@@ -55,7 +57,8 @@ void recovery_client_free(struct idevicerestore_client_t* client) {
 	}
 }
 
-int recovery_client_new(struct idevicerestore_client_t* client) {
+int recovery_client_new(struct idevicerestore_client_t* client)
+{
 	int i = 0;
 	int attempts = 20;
 	irecv_client_t recovery = NULL;
@@ -97,6 +100,7 @@ int recovery_client_new(struct idevicerestore_client_t* client) {
 	client->recovery->client = recovery;
 	return 0;
 }
+
 
 int recovery_check_mode(struct idevicerestore_client_t* client) {
 	irecv_client_t recovery = NULL;
@@ -145,7 +149,8 @@ int recovery_set_autoboot(struct idevicerestore_client_t* client, int enable) {
 	return 0;
 }
 
-int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build_identity) {
+int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build_identity)
+{
 	if (client->build_major >= 8) {
 		client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress");
 	} else if (client->build_major >= 20) {
@@ -246,16 +251,15 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 	
 
     if ((client->flags & FLAG_NOBOOTX) == 0){
-        debug("DEBUG: Waiting for device to disconnect...\n");
-        cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 30000);
-        if (client->mode == &idevicerestore_modes[MODE_RECOVERY] || (client->flags & FLAG_QUIT)) {
-            mutex_unlock(&client->device_event_mutex);
-            error("ERROR: Failed to place device in restore mode\n");
-            return -1;
-        }
+	    debug("DEBUG: Waiting for device to disconnect...\n");
+	    cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 30000);
+	    if (client->mode == MODE_RECOVERY || (client->flags & FLAG_QUIT)) {
+		    mutex_unlock(&client->device_event_mutex);
+		    error("ERROR: Failed to place device in restore mode\n");
+		    return -1;
+	    }
         mutex_unlock(&client->device_event_mutex);
     }
-
 	return 0;
 }
 
@@ -360,7 +364,8 @@ int recovery_send_component_and_command(struct idevicerestore_client_t* client, 
 	return 0;
 }
 
-int recovery_send_ibec(struct idevicerestore_client_t* client, plist_t build_identity) {
+int recovery_send_ibec(struct idevicerestore_client_t* client, plist_t build_identity)
+{
 	const char* component = "iBEC";
 	irecv_error_t recovery_error = IRECV_E_SUCCESS;
 
@@ -385,7 +390,8 @@ int recovery_send_ibec(struct idevicerestore_client_t* client, plist_t build_ide
 	return 0;
 }
 
-int recovery_send_applelogo(struct idevicerestore_client_t* client, plist_t build_identity) {
+int recovery_send_applelogo(struct idevicerestore_client_t* client, plist_t build_identity)
+{
 	const char* component = "RestoreLogo";
 	irecv_error_t recovery_error = IRECV_E_SUCCESS;
 
@@ -468,7 +474,8 @@ int recovery_send_loaded_by_iboot(struct idevicerestore_client_t* client, plist_
 	return (err) ? -1 : 0;
 }
 
-int recovery_send_ramdisk(struct idevicerestore_client_t* client, plist_t build_identity) {
+int recovery_send_ramdisk(struct idevicerestore_client_t* client, plist_t build_identity)
+{
 	const char *component = "RestoreRamDisk";
 	irecv_error_t recovery_error = IRECV_E_SUCCESS;
 
@@ -501,7 +508,8 @@ int recovery_send_ramdisk(struct idevicerestore_client_t* client, plist_t build_
 	return 0;
 }
 
-int recovery_send_kernelcache(struct idevicerestore_client_t* client, plist_t build_identity) {
+int recovery_send_kernelcache(struct idevicerestore_client_t* client, plist_t build_identity)
+{
 	const char* component = "RestoreKernelCache";
 	irecv_error_t recovery_error = IRECV_E_SUCCESS;
 
@@ -536,7 +544,8 @@ int recovery_send_kernelcache(struct idevicerestore_client_t* client, plist_t bu
 	return 0;
 }
 
-int recovery_get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
+int recovery_get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid)
+{
 	if(client->recovery == NULL) {
 		if (recovery_client_new(client) < 0) {
 			return -1;
@@ -568,7 +577,8 @@ int recovery_is_image4_supported(struct idevicerestore_client_t* client)
 	return (device_info->ibfl & IBOOT_FLAG_IMAGE4_AWARE);
 }
 
-int recovery_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size) {
+int recovery_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+{
 	if(client->recovery == NULL) {
 		if (recovery_client_new(client) < 0) {
 			return -1;
@@ -592,7 +602,8 @@ int recovery_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char*
 	return 0;
 }
 
-int recovery_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size) {
+int recovery_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+{
 	if(client->recovery == NULL) {
 		if (recovery_client_new(client) < 0) {
 			return -1;

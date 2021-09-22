@@ -40,7 +40,8 @@ static int dfu_progress_callback(irecv_client_t client, const irecv_event_t* eve
 	return 0;
 }
 
-int dfu_client_new(struct idevicerestore_client_t* client) {
+int dfu_client_new(struct idevicerestore_client_t* client)
+{
 	int i = 0;
 	int attempts = 10;
 	irecv_client_t dfu = NULL;
@@ -73,7 +74,8 @@ int dfu_client_new(struct idevicerestore_client_t* client) {
 	return 0;
 }
 
-void dfu_client_free(struct idevicerestore_client_t* client) {
+void dfu_client_free(struct idevicerestore_client_t* client)
+{
 	if(client != NULL) {
 		if (client->dfu != NULL) {
 			if(client->dfu->client != NULL) {
@@ -114,7 +116,8 @@ int dfu_check_mode(struct idevicerestore_client_t* client, int* mode) {
 	return 0;
 }
 
-irecv_device_t dfu_get_irecv_device(struct idevicerestore_client_t* client) {
+irecv_device_t dfu_get_irecv_device(struct idevicerestore_client_t* client)
+{
 	irecv_client_t dfu = NULL;
 	irecv_error_t dfu_error = IRECV_E_SUCCESS;
 	irecv_device_t device = NULL;
@@ -148,7 +151,8 @@ int dfu_send_buffer(struct idevicerestore_client_t* client, unsigned char* buffe
 	return 0;
 }
 
-int dfu_send_component(struct idevicerestore_client_t* client, plist_t build_identity, const char* component) {
+int dfu_send_component(struct idevicerestore_client_t* client, plist_t build_identity, const char* component)
+{
 	char* path = NULL;
 
 	// Use a specific TSS ticket for the Ap,LocalPolicy component
@@ -233,7 +237,8 @@ int dfu_send_component(struct idevicerestore_client_t* client, plist_t build_ide
 	return 0;
 }
 
-int dfu_get_cpid(struct idevicerestore_client_t* client, unsigned int* cpid) {
+int dfu_get_cpid(struct idevicerestore_client_t* client, unsigned int* cpid)
+{
 	if(client->dfu == NULL) {
 		if (dfu_client_new(client) < 0) {
 			return -1;
@@ -250,7 +255,8 @@ int dfu_get_cpid(struct idevicerestore_client_t* client, unsigned int* cpid) {
 	return 0;
 }
 
-int dfu_get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid) {
+int dfu_get_ecid(struct idevicerestore_client_t* client, uint64_t* ecid)
+{
 	if(client->dfu == NULL) {
 		if (dfu_client_new(client) < 0) {
 			return -1;
@@ -283,7 +289,8 @@ int dfu_is_image4_supported(struct idevicerestore_client_t* client)
 	return (device_info->ibfl & IBOOT_FLAG_IMAGE4_AWARE);
 }
 
-int dfu_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size) {
+int dfu_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+{
 	if(client->dfu == NULL) {
 		if (dfu_client_new(client) < 0) {
 			return -1;
@@ -307,7 +314,8 @@ int dfu_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** non
 	return 0;
 }
 
-int dfu_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size) {
+int dfu_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+{
 	if(client->dfu == NULL) {
 		if (dfu_client_new(client) < 0) {
 			return -1;
@@ -419,7 +427,7 @@ int dfu_enter_recovery(struct idevicerestore_client_t* client, plist_t build_ide
 
 	if (mode != IRECV_K_DFU_MODE) {
 		info("NOTE: device is not in DFU mode, assuming recovery mode.\n");
-		client->mode = &idevicerestore_modes[MODE_RECOVERY];
+		client->mode = MODE_RECOVERY;
 		return 0;
 	}
 
@@ -437,7 +445,7 @@ int dfu_enter_recovery(struct idevicerestore_client_t* client, plist_t build_ide
 		/* reconnect */
 		debug("Waiting for device to disconnect...\n");
 		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
-		if (client->mode != &idevicerestore_modes[MODE_UNKNOWN] || (client->flags & FLAG_QUIT)) {
+		if (client->mode != MODE_UNKNOWN || (client->flags & FLAG_QUIT)) {
 			mutex_unlock(&client->device_event_mutex);
 			if (!(client->flags & FLAG_QUIT)) {
 				error("ERROR: Device did not disconnect. Possibly invalid iBSS. Reset device and try again.\n");
@@ -446,7 +454,7 @@ int dfu_enter_recovery(struct idevicerestore_client_t* client, plist_t build_ide
 		}
 		debug("Waiting for device to reconnect...\n");
 		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
-		if ((client->mode != &idevicerestore_modes[MODE_DFU] && client->mode != &idevicerestore_modes[MODE_RECOVERY]) || (client->flags & FLAG_QUIT)) {
+		if ((client->mode != MODE_DFU && client->mode != MODE_RECOVERY) || (client->flags & FLAG_QUIT)) {
 			mutex_unlock(&client->device_event_mutex);
 			if (!(client->flags & FLAG_QUIT)) {
 				error("ERROR: Device did not reconnect in DFU or recovery mode. Possibly invalid iBSS. Reset device and try again.\n");
@@ -580,7 +588,7 @@ int dfu_enter_recovery(struct idevicerestore_client_t* client, plist_t build_ide
 			return -1;
 		}
 
-		if (client->mode == &idevicerestore_modes[MODE_RECOVERY]) {
+		if (client->mode == MODE_RECOVERY) {
 			sleep(1);
 			if (irecv_send_command_breq(client->dfu->client, "go", 1) != IRECV_E_SUCCESS) {
 				mutex_unlock(&client->device_event_mutex);
@@ -597,7 +605,7 @@ int dfu_enter_recovery(struct idevicerestore_client_t* client, plist_t build_ide
 
 	debug("Waiting for device to disconnect...\n");
 	cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
-	if (client->mode != &idevicerestore_modes[MODE_UNKNOWN] || (client->flags & FLAG_QUIT)) {
+	if (client->mode != MODE_UNKNOWN || (client->flags & FLAG_QUIT)) {
 		mutex_unlock(&client->device_event_mutex);
 		if (!(client->flags & FLAG_QUIT)) {
 			error("ERROR: Device did not disconnect. Possibly invalid %s. Reset device and try again.\n", (client->build_major > 8) ? "iBEC" : "iBSS");
@@ -606,7 +614,7 @@ int dfu_enter_recovery(struct idevicerestore_client_t* client, plist_t build_ide
 	}
 	debug("Waiting for device to reconnect in recovery mode...\n");
 	cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
-	if (client->mode != &idevicerestore_modes[MODE_RECOVERY] || (client->flags & FLAG_QUIT)) {
+	if (client->mode != MODE_RECOVERY || (client->flags & FLAG_QUIT)) {
 		mutex_unlock(&client->device_event_mutex);
 		if (!(client->flags & FLAG_QUIT)) {
 			error("ERROR: Device did not reconnect in recovery mode. Possibly invalid %s. Reset device and try again.\n", (client->build_major > 8) ? "iBEC" : "iBSS");

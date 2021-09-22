@@ -357,7 +357,7 @@ int restore_reboot(struct idevicerestore_client_t* client)
 	restored_client_free(client->restore->client);
 
 	cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 30000);
-	if (client->mode == &idevicerestore_modes[MODE_RESTORE]) {
+	if (client->mode == MODE_RESTORE) {
 		mutex_unlock(&client->device_event_mutex);
 		return -1;
 	}
@@ -2907,7 +2907,8 @@ error_out:
 	return -1;
 }
 
-plist_t restore_get_build_identity(struct idevicerestore_client_t* client, uint8_t is_recover_os) {
+plist_t restore_get_build_identity(struct idevicerestore_client_t* client, uint8_t is_recover_os)
+{
 	unsigned int size = 0;
 	unsigned char* data = NULL;
 	plist_t buildmanifest = NULL;
@@ -2927,7 +2928,8 @@ plist_t restore_get_build_identity(struct idevicerestore_client_t* client, uint8
 	return build_identity;
 }
 
-plist_t restore_get_build_identity_from_request(struct idevicerestore_client_t* client, plist_t msg) {
+plist_t restore_get_build_identity_from_request(struct idevicerestore_client_t* client, plist_t msg)
+{
 	plist_t args = plist_dict_get_item(msg, "Arguments");
 	plist_t is_recovery_node = plist_dict_get_item(args, "IsRecoveryOS");
 	uint8_t is_recovery = 0;
@@ -2936,7 +2938,8 @@ plist_t restore_get_build_identity_from_request(struct idevicerestore_client_t* 
 	return restore_get_build_identity(client, is_recovery);
 }
 
-int extract_macos_variant(plist_t build_identity, char** output) {
+int extract_macos_variant(plist_t build_identity, char** output)
+{
 	plist_t build_info = plist_dict_get_item(build_identity, "Info");
 	if (!build_info) {
 		error("ERROR: build identity does not contain an 'Info' element\n");
@@ -2953,7 +2956,8 @@ int extract_macos_variant(plist_t build_identity, char** output) {
 	return 0;
 }
 
-int extract_global_manifest(struct idevicerestore_client_t* client, plist_t build_identity, unsigned char** pbuffer, unsigned int* psize) {
+int extract_global_manifest(struct idevicerestore_client_t* client, plist_t build_identity, unsigned char** pbuffer, unsigned int* psize)
+{
 	plist_t build_info = plist_dict_get_item(build_identity, "Info");
 	if (!build_info) {
 		error("ERROR: build identity does not contain an 'Info' element\n");
@@ -2993,7 +2997,8 @@ int extract_global_manifest(struct idevicerestore_client_t* client, plist_t buil
 	return 0;
 }
 
-int restore_send_personalized_boot_object_v3(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg, plist_t build_identity) {
+int restore_send_personalized_boot_object_v3(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg, plist_t build_identity)
+{
 	debug_plist(msg);
 
 	char *image_name = NULL;
@@ -3045,6 +3050,10 @@ int restore_send_personalized_boot_object_v3(restored_client_t restore, struct i
 		}
 		if (!path) {
 			plist_t build_identity = restore_get_build_identity_from_request(client, msg);
+			if (!build_identity) {
+				error("ERROR: Unable to find a matching build identity\n");
+				return -1;
+			}
 			if (build_identity_get_component_path(build_identity, component, &path) < 0) {
 				error("ERROR: Unable to find %s path from build identity\n", component);
 				return -1;
@@ -3112,7 +3121,8 @@ int restore_send_personalized_boot_object_v3(restored_client_t restore, struct i
 	return 0;
 }
 
-int restore_send_source_boot_object_v4(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg, plist_t build_identity) {
+int restore_send_source_boot_object_v4(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg, plist_t build_identity)
+{
 	debug_plist(msg);
 
 	char *image_name = NULL;
@@ -3221,7 +3231,8 @@ int restore_send_source_boot_object_v4(restored_client_t restore, struct idevice
 	return 0;
 }
 
-int restore_send_restore_local_policy(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg) {
+int restore_send_restore_local_policy(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg)
+{
 	unsigned int size = 0;
 	unsigned char* data = NULL;
 
@@ -3234,7 +3245,8 @@ int restore_send_restore_local_policy(restored_client_t restore, struct idevicer
 	component_size = sizeof(lpol_file);
 	memcpy(component_data, lpol_file, component_size);
 
-	plist_t build_identity = restore_get_build_identity(client, 1);
+	// The Update mode does not have a specific build identity for the recovery os.
+	plist_t build_identity = restore_get_build_identity(client, client->flags & FLAG_ERASE ? 1 : 0);
 
 	int ret = get_recovery_os_local_policy_tss_response(client, build_identity, &client->tss_localpolicy, plist_dict_get_item(msg, "Arguments"));
 	if (ret < 0) {
@@ -3265,7 +3277,8 @@ int restore_send_restore_local_policy(restored_client_t restore, struct idevicer
 	return 0;
 }
 
-int restore_send_buildidentity(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg) {
+int restore_send_buildidentity(restored_client_t restore, struct idevicerestore_client_t* client, plist_t msg)
+{
 	restored_error_t restore_error;
 	plist_t dict;
 
@@ -3466,7 +3479,8 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idev
 }
 
 // Extracted from ac2
-plist_t restore_supported_data_types() {
+plist_t restore_supported_data_types()
+{
 	plist_t dict = plist_new_dict();
 	plist_dict_set_item(dict, "BasebandBootData", plist_new_bool(0));
 	plist_dict_set_item(dict, "BasebandData", plist_new_bool(0));
@@ -3526,7 +3540,8 @@ plist_t restore_supported_data_types() {
 }
 
 // Extracted from ac2
-plist_t restore_supported_message_types() {
+plist_t restore_supported_message_types()
+{
 	plist_t dict = plist_new_dict();
 	plist_dict_set_item(dict, "BBUpdateStatusMsg", plist_new_bool(0));
 	plist_dict_set_item(dict, "CheckpointMsg", plist_new_bool(1));
@@ -3554,7 +3569,8 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	idevice_t device = NULL;
 	restored_client_t restore = NULL;
 	restored_error_t restore_error = RESTORE_E_SUCCESS;
-	THREAD_T fdr_thread = (THREAD_T)NULL;
+	THREAD_T fdr_thread = THREAD_T_NULL;
+
 	restore_finished = 0;
 
 	// open our connection to the device and verify we're in restore mode
@@ -3648,7 +3664,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	if (!fdr_connect(device, FDR_CTRL, &fdr_control_channel)) {
 		if(thread_new(&fdr_thread, fdr_listener_thread, fdr_control_channel)) {
 			error("ERROR: Failed to start FDR listener thread\n");
-			fdr_thread = (THREAD_T)NULL; /* undefined after failure */
+			fdr_thread = THREAD_T_NULL; /* undefined after failure */
 		}
 	} else {
 		error("ERROR: Failed to start FDR Ctrl channel\n");
@@ -3674,6 +3690,9 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 			plist_dict_set_item(opts, "BasebandNonce", plist_copy(node));
 		}
 	}
+
+	plist_dict_set_item(opts, "SupportedDataTypes", restore_supported_data_types());
+	plist_dict_set_item(opts, "SupportedMessageTypes", restore_supported_message_types());
 
 	// FIXME: Should be adjusted for update behaviors
 	if (client->build_major >= 20) {
@@ -3702,8 +3721,6 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		plist_dict_set_item(opts, "RecoveryOSUnpack", plist_new_bool(1));
 		plist_dict_set_item(opts, "ShouldRestoreSystemImage", plist_new_bool(1));
 		plist_dict_set_item(opts, "SkipPreflightPersonalization", plist_new_bool(0));
-		plist_dict_set_item(opts, "SupportedDataTypes", restore_supported_data_types());
-		plist_dict_set_item(opts, "SupportedMessageTypes", restore_supported_message_types());
 		plist_dict_set_item(opts, "UpdateBaseband", plist_new_bool(1));
 		// FIXME: I don't know where this number comes from yet. It seems like it matches this part of the build identity:
 		// 	<key>OSVarContentSize</key>

@@ -730,147 +730,124 @@ int tss_request_add_ap_recovery_tags(plist_t request, plist_t parameters, plist_
 	plist_dict_iter iter = NULL;
 	plist_dict_new_iter(manifest_node, &iter);
 	while (1) {
+		free(key);
+		key = NULL;
 		plist_dict_next_item(manifest_node, iter, &key, &manifest_entry);
 		if (key == NULL)
 			break;
 		if (!manifest_entry || plist_get_node_type(manifest_entry) != PLIST_DICT) {
 			error("ERROR: Unable to fetch BuildManifest entry\n");
+			free(key);
 			return -1;
 		}
 
 		/* do not populate BaseBandFirmware, only in basebaseband request */
 		if ((strcmp(key, "BasebandFirmware") == 0)) {
-			free(key);
 			continue;
 		}
 
 		// Compared to ac2, not needed for RecoveryOSRootTicket
 		if ((strcmp(key, "SE,UpdatePayload") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "BaseSystem") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "ANS") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "Ap,AudioBootChime") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "Ap,CIO") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "Ap,RestoreCIO") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "Ap,RestoreTMU") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "Ap,TMU") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "Ap,rOSLogo1") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "Ap,rOSLogo2") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "AppleLogo") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "DCP") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "LLB") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RecoveryMode") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RestoreANS") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RestoreDCP") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RestoreDeviceTree") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RestoreKernelCache") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RestoreLogo") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RestoreRamDisk") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "RestoreSEP") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "SEP") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "ftap") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "ftsp") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "iBEC") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "iBSS") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "rfta") == 0)) {
-			free(key);
 			continue;
 		}
 		if ((strcmp(key, "rfts") == 0)) {
-			free(key);
 			continue;
 		}
 
 		/* FIXME: only used with diagnostics firmware */
 		if (strcmp(key, "Diags") == 0) {
-			free(key);
+			continue;
+		}
+
+		plist_t info_dict = plist_dict_get_item(manifest_entry, "Info");
+		if (!info_dict) {
 			continue;
 		}
 
 		if (_plist_dict_get_bool(parameters, "_OnlyFWComponents")) {
 			if (!_plist_dict_get_bool(manifest_entry, "Trusted")) {
-				debug("DEBUG: %s: Skipping '%s' as it is not trusted", __func__, key);
+				debug("DEBUG: %s: Skipping '%s' as it is not trusted\n", __func__, key);
 				continue;
 			}
 
-			plist_t info_dict = plist_dict_get_item(manifest_entry, "Info");
 			if (!_plist_dict_get_bool(info_dict, "IsFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsSecondaryFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsFUDFirmware")) {
 				debug("DEBUG: %s: Skipping '%s' as it is neither firmware nor secondary nor FUD firmware payload\n", __func__, key);
 				continue;
@@ -879,10 +856,6 @@ int tss_request_add_ap_recovery_tags(plist_t request, plist_t parameters, plist_
 
 		/* copy this entry */
 		plist_t tss_entry = plist_copy(manifest_entry);
-
-		// ac2 TSS recoveryOSRootTicket needs EPRO and ESEC to be true
-		plist_dict_set_item(tss_entry, "EPRO", plist_new_bool(1));
-		plist_dict_set_item(tss_entry, "ESEC", plist_new_bool(1));
 
 		/* remove obsolete Info node */
 		plist_dict_remove_item(tss_entry, "Info");
@@ -907,9 +880,8 @@ int tss_request_add_ap_recovery_tags(plist_t request, plist_t parameters, plist_
 
 		/* finally add entry to request */
 		plist_dict_set_item(request, key, tss_entry);
-
-		free(key);
 	}
+	free(key);
 	free(iter);
 
 	/* apply overrides */
@@ -934,45 +906,55 @@ int tss_request_add_ap_tags(plist_t request, plist_t parameters, plist_t overrid
 	plist_dict_iter iter = NULL;
 	plist_dict_new_iter(manifest_node, &iter);
 	while (1) {
+		free(key);
+		key = NULL;
 		plist_dict_next_item(manifest_node, iter, &key, &manifest_entry);
 		if (key == NULL)
 			break;
 		if (!manifest_entry || plist_get_node_type(manifest_entry) != PLIST_DICT) {
 			error("ERROR: Unable to fetch BuildManifest entry\n");
+			free(key);
 			return -1;
 		}
 
 		/* do not populate BasebandFirmware, only in baseband request */
 		if ((strcmp(key, "BasebandFirmware") == 0)) {
-			free(key);
 			continue;
 		}
 
 		// Compared to ac2, not needed
 		if ((strcmp(key, "SE,UpdatePayload") == 0)) {
-			free(key);
 			continue;
 		}
 
 		// Compared to ac2, not needed
 		if ((strcmp(key, "BaseSystem") == 0)) {
-			free(key);
 			continue;
 		}
 
 		/* FIXME: only used with diagnostics firmware */
 		if (strcmp(key, "Diags") == 0) {
-			free(key);
 			continue;
+		}
+
+		plist_t info_dict = plist_dict_get_item(manifest_entry, "Info");
+		if (!info_dict) {
+			continue;
+		}
+
+		if (_plist_dict_get_bool(parameters, "ApSupportsImg4")) {
+			if (!plist_dict_get_item(info_dict, "RestoreRequestRules")) {
+				debug("DEBUG: %s: Skipping '%s' as it doesn't have RestoreRequestRules\n", __func__, key);
+				continue;
+			}
 		}
 
 		if (_plist_dict_get_bool(parameters, "_OnlyFWComponents")) {
 			if (!_plist_dict_get_bool(manifest_entry, "Trusted")) {
-				debug("DEBUG: %s: Skipping '%s' as it is not trusted", __func__, key);
+				debug("DEBUG: %s: Skipping '%s' as it is not trusted\n", __func__, key);
 				continue;
 			}
 
-			plist_t info_dict = plist_dict_get_item(manifest_entry, "Info");
 			if (!_plist_dict_get_bool(info_dict, "IsFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsSecondaryFirmwarePayload") && !_plist_dict_get_bool(info_dict, "IsFUDFirmware")) {
 				debug("DEBUG: %s: Skipping '%s' as it is neither firmware nor secondary nor FUD firmware payload\n", __func__, key);
 				continue;
@@ -1005,8 +987,8 @@ int tss_request_add_ap_tags(plist_t request, plist_t parameters, plist_t overrid
 
 		/* finally add entry to request */
 		plist_dict_set_item(request, key, tss_entry);
-		free(key);
 	}
+	free(key);
 	free(iter);
 
 	/* apply overrides */
@@ -1197,18 +1179,18 @@ int tss_request_add_se_tags(plist_t request, plist_t parameters, plist_t overrid
 	plist_dict_iter iter = NULL;
 	plist_dict_new_iter(manifest_node, &iter);
 	while (1) {
+		free(key);
 		key = NULL;
 		plist_dict_next_item(manifest_node, iter, &key, &manifest_entry);
 		if (key == NULL)
 			break;
 		if (!manifest_entry || plist_get_node_type(manifest_entry) != PLIST_DICT) {
-			free(key);
 			error("ERROR: Unable to fetch BuildManifest entry\n");
+			free(key);
 			return -1;
 		}
 
 		if (strncmp(key, "SE,", 3)) {
-			free(key);
 			continue;
 		}
 
@@ -1233,8 +1215,8 @@ int tss_request_add_se_tags(plist_t request, plist_t parameters, plist_t overrid
 
 		/* add entry to request */
 		plist_dict_set_item(request, key, tss_entry);
-		free(key);
 	}
+	free(key);
 	free(iter);
 
 	/* apply overrides */
