@@ -2,7 +2,7 @@
 
 *A command-line application to restore firmware files to iOS devices.*
 
-![](https://github.com/libimobiledevice/idevicerestore/actions/workflows/build.yml/badge.svg)
+![](https://github.com/m1stadev/idevicerestore/actions/workflows/build.yml/badge.svg)
 
 ## Features
 
@@ -73,7 +73,7 @@ clone [these libraries](https://github.com/libimobiledevice/) separately and rep
 
 Continue with cloning the actual project repository:
 ```shell
-git clone https://github.com/libimobiledevice/idevicerestore.git
+git clone https://github.com/m1stadev/idevicerestore.git
 cd idevicerestore
 ```
 
@@ -165,4 +165,4 @@ iPadOS, tvOS, watchOS, and macOS are trademarks of Apple Inc.
 This project is an independent software application and has not been
 authorized, sponsored, or otherwise approved by Apple Inc.
 
-README Updated on: 2021-08-30
+README Updated on: 2021-09-23
