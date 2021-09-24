@@ -109,7 +109,7 @@ int dfu_check_mode(struct idevicerestore_client_t* client, int* mode) {
 		return -1;
 	}
 
-	*mode = (probe_mode == IRECV_K_WTF_MODE) ? MODE_WTF : MODE_DFU;
+	*mode = (probe_mode == IRECV_K_WTF_MODE) ? _MODE_WTF : _MODE_DFU;
 
 	irecv_close(dfu);
 
