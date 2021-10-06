@@ -300,6 +300,7 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
 	unsigned char* data = NULL;
 	char* path = NULL;
 	irecv_error_t err = 0;
+	int ret;
  
     if (!client->recovery_custom_component_function) {
         if (client->tss) {
@@ -317,7 +318,26 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
         
         unsigned char* component_data = NULL;
         unsigned int component_size = 0;
-        int ret = extract_component(client->ipsw, path, &component_data, &component_size);
+        if(!strcmp(component, "RestoreRamDisk") && client->ramdiskdatasize) {
+            component_data = malloc(component_size = (unsigned int) client->ramdiskdatasize);
+            memcpy(component_data, client->ramdiskdata, component_size);
+            client->ramdiskdatasize = NULL;
+            client->ramdiskdata = NULL;
+            info("1337 CUSTOM RAMDISK!\n");
+        } else if(!strcmp(component, "RestoreKernelCache") && client->kerneldatasize) {
+            component_data = malloc(component_size = (unsigned int)client->kerneldatasize);
+            memcpy(component_data, client->kerneldata, component_size);
+            client->kerneldatasize = NULL;
+            client->kerneldata = NULL;
+            info("1337 CUSTOM KERNEL!\n");
+        } else {
+            ret = extract_component(client->ipsw, path, &component_data, &component_size);
+            if (ret < 0) {
+                error("ERROR: Unable to extract '%s' component\n", component);
+                return -1;
+            }
+        }
+
         free(path);
         if (ret < 0) {
             error("ERROR: Unable to extract component: %s\n", component);

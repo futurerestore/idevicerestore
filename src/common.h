@@ -89,6 +89,8 @@ struct idevicerestore_entry_t {
 struct idevicerestore_client_t {
 	int flags;
 	char *otamanifest;
+	char *ramdiskdata;
+	size_t ramdiskdatasize;
 	char *kerneldata;
 	size_t kerneldatasize;
 	char *rosefwdata;
