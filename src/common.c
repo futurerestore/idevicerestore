@@ -225,10 +225,10 @@ void debug_plist(plist_t plist) {
 	uint32_t size = 0;
 	char* data = NULL;
 	plist_to_xml(plist, &data, &size);
-	// if (size <= MAX_PRINT_LEN)
+	if (size <= MAX_PRINT_LEN)
 		info("%s:printing %i bytes plist:\n%s", __FILE__, size, data);
-	// else
-		// info("%s:supressed printing %i bytes plist...\n", __FILE__, size);
+	else
+		info("%s:supressed printing %i bytes plist...\n", __FILE__, size);
 	free(data);
 }
 
