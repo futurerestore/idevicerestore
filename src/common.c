@@ -224,7 +224,10 @@ int read_file(const char* filename, void** data, size_t* size) {
 void debug_plist(plist_t plist) {
 	uint32_t size = 0;
 	char* data = NULL;
-	plist_to_xml(plist, &data, &size);
+	if(plist_to_xml(plist, &data, &size) != PLIST_ERR_SUCCESS) {
+		info("Failed to convert plist data to xml!\n");
+		return;
+	}
 	if (size <= MAX_PRINT_LEN)
 		info("%s:printing %i bytes plist:\n%s", __FILE__, size, data);
 	else
