@@ -2155,6 +2155,22 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 		return NULL;
 	}
 
+	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+	free(comp_path);
+	comp_path = NULL;
+	if (ret < 0) {
+		error("ERROR: Unable to extract '%s' component\n", comp_name);
+		return NULL;
+	}
+
+	/* create SE request */
+	request = tss_request_new(NULL);
+	if (request == NULL) {
+		error("ERROR: Unable to create SE TSS request\n");
+		free(component_data);
+		return NULL;
+	}
+
 	parameters = plist_new_dict();
 
 	/* add manifest for current build_identity to parameters */
