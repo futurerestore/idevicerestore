@@ -54,7 +54,11 @@
 #include "common.h"
 #include "endianness.h"
 
+#ifdef DEBUG
+#define MAX_PRINT_LEN 64*1024*1024*1024
+#else
 #define MAX_PRINT_LEN 64*1024
+#endif
 
 struct idevicerestore_mode_t idevicerestore_modes[] = {
 	{  0, "Unknown"  },
