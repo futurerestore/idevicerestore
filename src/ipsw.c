@@ -150,10 +150,10 @@ int ipsw_print_info(const char* path)
 		plist_get_string_val(val, &build_ver);
 	}
 
-	cprintf(FG_WHITE "Product Version: " FG_BRIGHT_YELLOW "%s" COLOR_RESET FG_WHITE "   Build: " FG_BRIGHT_YELLOW "%s" COLOR_RESET "\n", prod_ver, build_ver);
+	cprintf(COLOR_WHITE "Product Version: " COLOR_BRIGHT_YELLOW "%s" COLOR_RESET COLOR_WHITE "   Build: " COLOR_BRIGHT_YELLOW "%s" COLOR_RESET "\n", prod_ver, build_ver);
 	free(prod_ver);
 	free(build_ver);
-	cprintf(FG_WHITE "Supported Product Types:" COLOR_RESET);
+	cprintf(COLOR_WHITE "Supported Product Types:" COLOR_RESET);
 	val = plist_dict_get_item(manifest, "SupportedProductTypes");
 	if (val) {
 		plist_array_iter iter = NULL;
@@ -165,7 +165,7 @@ int ipsw_print_info(const char* path)
 				if (item) {
 					char* item_str = NULL;
 					plist_get_string_val(item, &item_str);
-					cprintf(" " FG_BRIGHT_CYAN "%s" COLOR_RESET, item_str);
+					cprintf(" " COLOR_BRIGHT_CYAN "%s" COLOR_RESET, item_str);
 					free(item_str);
 				}
 			} while (item);
@@ -174,7 +174,7 @@ int ipsw_print_info(const char* path)
 	}
 	cprintf("\n");
 
-	cprintf(FG_WHITE "Build Identities:" COLOR_RESET "\n");
+	cprintf(COLOR_WHITE "Build Identities:" COLOR_RESET "\n");
 
 	plist_t build_ids_grouped = plist_new_dict();
 
@@ -230,7 +230,7 @@ int ipsw_print_info(const char* path)
 			group_no++;
 			node = plist_dict_get_item(group, "RestoreBehavior");
 			plist_get_string_val(node, &rbehavior);
-			cprintf("  " FG_WHITE "[%d] Variant: " FG_BRIGHT_CYAN "%s" FG_WHITE "   Behavior: " FG_BRIGHT_CYAN "%s" COLOR_RESET "\n", group_no, key, rbehavior);
+			cprintf("  " COLOR_WHITE "[%d] Variant: " COLOR_BRIGHT_CYAN "%s" COLOR_WHITE "   Behavior: " COLOR_BRIGHT_CYAN "%s" COLOR_RESET "\n", group_no, key, rbehavior);
 			free(key);
 			free(rbehavior);
 
@@ -283,9 +283,9 @@ int ipsw_print_info(const char* path)
 
 				irecv_device_t irecvdev = NULL;
 				if (irecv_devices_get_device_by_hardware_model(hwmodel, &irecvdev) == 0) {
-					cprintf("    ChipID: " FG_GREEN "%04x" COLOR_RESET "   BoardID: " FG_GREEN "%02x" COLOR_RESET "   Model: " FG_YELLOW "%-8s" COLOR_RESET "  " FG_MAGENTA "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel, irecvdev->display_name);
+					cprintf("    ChipID: " COLOR_GREEN "%04x" COLOR_RESET "   BoardID: " COLOR_GREEN "%02x" COLOR_RESET "   Model: " COLOR_YELLOW "%-8s" COLOR_RESET "  " COLOR_MAGENTA "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel, irecvdev->display_name);
 				} else {
-					cprintf("    ChipID: " FG_GREEN "%04x" COLOR_RESET "   BoardID: " FG_GREEN "%02x" COLOR_RESET "   Model: " FG_YELLOW "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel);
+					cprintf("    ChipID: " COLOR_GREEN "%04x" COLOR_RESET "   BoardID: " COLOR_GREEN "%02x" COLOR_RESET "   Model: " COLOR_YELLOW "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel);
 				}
 				free(hwmodel);
 			} while (build_id);
