@@ -89,6 +89,7 @@ static struct option longopts[] = {
 	{ "no-restore",     no_argument,       NULL, 'z' },
 	{ "version",        no_argument,       NULL, 'v' },
 	{ "ipsw-info",      no_argument,       NULL, 'I' },
+	{ "ignore-errors",  no_argument,       NULL,  1  },
 	{ NULL, 0, NULL, 0 }
 };
 
@@ -147,6 +148,10 @@ static void usage(int argc, char* argv[], int err)
 	"  -P, --plain-progress  Print progress as plain step and progress\n" \
 	"  -R, --restore-mode    Allow restoring from Restore mode\n" \
 	"  -T, --ticket PATH     Use file at PATH to send as AP ticket\n" \
+	"  --ignore-errors       Try to continue the restore process after certain\n" \
+	"                        errors (like a failed baseband update)\n" \
+	"                        WARNING: This might render the device unable to boot\n" \
+	"                        or only partially functioning. Use with caution.\n" \
 	"\n" \
 	"Homepage:    <" PACKAGE_URL ">\n" \
 	"Bug Reports: <" PACKAGE_BUGREPORT ">\n",
@@ -634,16 +639,15 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	}
 
 	// extract buildmanifest
-	plist_t buildmanifest = NULL;
 	if (client->flags & FLAG_CUSTOM) {
 		info("Extracting Restore.plist from IPSW\n");
-		if (ipsw_extract_restore_plist(client->ipsw, &buildmanifest) < 0) {
+		if (ipsw_extract_restore_plist(client->ipsw, &client->build_manifest) < 0) {
 			error("ERROR: Unable to extract Restore.plist from %s. Firmware file might be corrupt.\n", client->ipsw);
 			return -1;
 		}
 	} else {
 		info("Extracting BuildManifest from IPSW\n");
-		if (ipsw_extract_build_manifest(client->ipsw, &buildmanifest, &tss_enabled) < 0) {
+		if (ipsw_extract_build_manifest(client->ipsw, &client->build_manifest, &tss_enabled) < 0) {
 			error("ERROR: Unable to extract BuildManifest from %s. Firmware file might be corrupt.\n", client->ipsw);
 			return -1;
 		}
@@ -651,13 +655,13 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	idevicerestore_progress(client, RESTORE_STEP_DETECT, 0.8);
 
 	/* check if device type is supported by the given build manifest */
-	if (build_manifest_check_compatibility(buildmanifest, client->device->product_type) < 0) {
+	if (build_manifest_check_compatibility(client->build_manifest, client->device->product_type) < 0) {
 		error("ERROR: Could not make sure this firmware is suitable for the current device. Refusing to continue.\n");
 		return -1;
 	}
 
 	/* print iOS information from the manifest */
-	build_manifest_get_version_information(buildmanifest, client);
+	build_manifest_get_version_information(client->build_manifest, client);
 
 	info("Product Version: %s\n", client->version);
 	info("Product Build: %s Major: %d\n", client->build, client->build_major);
@@ -674,8 +678,10 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	// choose whether this is an upgrade or a restore (default to upgrade)
 	client->tss = NULL;
 	plist_t build_identity = NULL;
+	int build_identity_needs_free = 0;
 	if (client->flags & FLAG_CUSTOM) {
 		build_identity = plist_new_dict();
+		build_identity_needs_free = 1;
 		{
 			plist_t node;
 			plist_t comp;
@@ -702,6 +708,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			uint32_t msize = 0;
 			if (ipsw_extract_to_memory(client->ipsw, tmpstr, (unsigned char**)&fmanifest, &msize) < 0) {
 				error("ERROR: could not extract %s from IPSW\n", tmpstr);
+				free(build_identity);
 				return -1;
 			}
 
@@ -759,7 +766,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			// add kernel cache
 			plist_t kdict = NULL;
 
-			node = plist_dict_get_item(buildmanifest, "KernelCachesByTarget");
+			node = plist_dict_get_item(client->build_manifest, "KernelCachesByTarget");
 			if (node && (plist_get_node_type(node) == PLIST_DICT)) {
 				char tt[4];
 				strncpy(tt, lcmodel, 3);
@@ -767,7 +774,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 				kdict = plist_dict_get_item(node, tt);
 			} else {
 				// Populated in older iOS IPSWs
-				kdict = plist_dict_get_item(buildmanifest, "RestoreKernelCaches");
+				kdict = plist_dict_get_item(client->build_manifest, "RestoreKernelCaches");
 			}
 			if (kdict && (plist_get_node_type(kdict) == PLIST_DICT)) {
 				plist_t kc = plist_dict_get_item(kdict, "Release");
@@ -782,7 +789,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			}
 
 			// add ramdisk
-			node = plist_dict_get_item(buildmanifest, "RestoreRamDisks");
+			node = plist_dict_get_item(client->build_manifest, "RestoreRamDisks");
 			if (node && (plist_get_node_type(node) == PLIST_DICT)) {
 				plist_t rd = plist_dict_get_item(node, (client->flags & FLAG_ERASE) ? "User" : "Update");
 				// if no "Update" ram disk entry is found try "User" ram disk instead
@@ -801,7 +808,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			}
 
 			// add OS filesystem
-			node = plist_dict_get_item(buildmanifest, "SystemRestoreImages");
+			node = plist_dict_get_item(client->build_manifest, "SystemRestoreImages");
 			if (!node) {
 				error("ERROR: missing SystemRestoreImages in Restore.plist\n");
 			}
@@ -819,23 +826,22 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			// add info
 			inf = plist_new_dict();
 			plist_dict_set_item(inf, "RestoreBehavior", plist_new_string((client->flags & FLAG_ERASE) ? "Erase" : "Update"));
-			plist_dict_set_item(inf, "Variant", plist_new_string((client->flags & FLAG_ERASE) ? "Customer Erase Install (IPSW)" : "Customer Upgrade Install (IPSW)"));
+			plist_dict_set_item(inf, "Variant", plist_new_string((client->flags & FLAG_ERASE) ? "Customer " RESTORE_VARIANT_ERASE_INSTALL : "Customer " RESTORE_VARIANT_UPGRADE_INSTALL));
 			plist_dict_set_item(build_identity, "Info", inf);
 
 			// finally add manifest
 			plist_dict_set_item(build_identity, "Manifest", manifest);
 		}
 	} else if (client->flags & FLAG_ERASE) {
-		build_identity = build_manifest_get_build_identity_for_model_with_restore_behavior(buildmanifest, client->device->hardware_model, "Erase");
+		build_identity = build_manifest_get_build_identity_for_model_with_variant(client->build_manifest, client->device->hardware_model, RESTORE_VARIANT_ERASE_INSTALL);
 		if (build_identity == NULL) {
 			error("ERROR: Unable to find any build identities\n");
-			plist_free(buildmanifest);
 			return -1;
 		}
 	} else {
-		build_identity = build_manifest_get_build_identity_for_model_with_restore_behavior(buildmanifest, client->device->hardware_model, "Update");
+		build_identity = build_manifest_get_build_identity_for_model_with_variant(client->build_manifest, client->device->hardware_model, RESTORE_VARIANT_UPGRADE_INSTALL);
 		if (!build_identity) {
-			build_identity = build_manifest_get_build_identity_for_model(buildmanifest, client->device->hardware_model);
+			build_identity = build_manifest_get_build_identity_for_model(client->build_manifest, client->device->hardware_model);
 		}
 	}
     
@@ -858,8 +864,14 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
         free(opl);
     }
 
+	client->macos_variant = build_manifest_get_build_identity_for_model_with_variant(client->build_manifest, client->device->hardware_model, RESTORE_VARIANT_MACOS_RECOVERY_OS);
+
 	/* print information about current build identity */
 	build_identity_print_information(build_identity);
+
+	if (client->macos_variant) {
+		info("Performing macOS restore\n");
+	}
 
 	if (client->mode == MODE_NORMAL && !(client->flags & FLAG_ERASE) && !(client->flags & FLAG_SHSHONLY)) {
 		plist_t pver = normal_get_lockdown_value(client, NULL, "ProductVersion");
@@ -1032,7 +1044,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			error("ERROR: Unable to extract filesystem from IPSW\n");
 			if (client->tss)
 				plist_free(client->tss);
-			plist_free(buildmanifest);
 			info("Removing %s\n", filesystem);
 			unlink(filesystem);
 			return -1;
@@ -1116,7 +1127,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			error("ERROR: Unable to get SHSH blobs for this device\n");
 			return -1;
 		}
-		if (client->build_major >= 20) {
+		if (client->macos_variant) {
 			if (get_local_policy_tss_response(client, build_identity, &client->tss_localpolicy) < 0) {
 				error("ERROR: Unable to get SHSH blobs for this device (local policy)\n");
 				return -1;
@@ -1155,7 +1166,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		}
 		if (!client->tss) {
 			error("ERROR: could not fetch TSS record\n");
-			plist_free(buildmanifest);
 			return -1;
 		} else {
 			char *bin = NULL;
@@ -1185,7 +1195,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 				error("ERROR: could not get TSS record data\n");
 			}
 			plist_free(client->tss);
-			plist_free(buildmanifest);
 			return 0;
 		}
 	}
@@ -1193,7 +1202,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 	/* verify if we have tss records if required */
 	if ((tss_enabled) && (client->tss == NULL)) {
 		error("ERROR: Unable to proceed without a TSS record.\n");
-		plist_free(buildmanifest);
 		return -1;
 	}
 
@@ -1215,7 +1223,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			error("ERROR: Unable to place device into recovery mode from normal mode\n");
 			if (client->tss)
 				plist_free(client->tss);
-			plist_free(buildmanifest);
 			return -5;
 		}
 	}
@@ -1252,7 +1259,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		}
 		if (dfu_enter_recovery(client, build_identity) < 0) {
 			error("ERROR: Unable to place device into recovery mode from DFU mode\n");
-			plist_free(buildmanifest);
 			if (client->tss)
 				plist_free(client->tss);
 			if (delete_fs && filesystem)
@@ -1286,7 +1292,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		recovery_client_free(client);
 
 		debug("Waiting for device to disconnect...\n");
-		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
+		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 60000);
 		if (client->mode != MODE_UNKNOWN || (client->flags & FLAG_QUIT)) {
 			mutex_unlock(&client->device_event_mutex);
 
@@ -1298,7 +1304,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			return -2;
 		}
 		debug("Waiting for device to reconnect in recovery mode...\n");
-		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 10000);
+		cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 60000);
 		if (client->mode != MODE_RECOVERY || (client->flags & FLAG_QUIT)) {
 			mutex_unlock(&client->device_event_mutex);
 			if (!(client->flags & FLAG_QUIT)) {
@@ -1377,7 +1383,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		}
 		if (recovery_enter_restore(client, build_identity) < 0) {
 			error("ERROR: Unable to place device into restore mode\n");
-			plist_free(buildmanifest);
 			if (client->tss)
 				plist_free(client->tss);
 			if (delete_fs && filesystem)
@@ -1443,10 +1448,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 		idevicerestore_progress(client, RESTORE_NUM_STEPS-1, 1.0);
 	}
 
-	if (buildmanifest)
-		plist_free(buildmanifest);
-
-	if (build_identity)
+	if (build_identity_needs_free)
 		plist_free(build_identity);
 
 	return result;
@@ -1516,6 +1518,12 @@ void idevicerestore_client_free(struct idevicerestore_client_t* client)
 	}
 	if (client->root_ticket) {
 		free(client->root_ticket);
+	}
+	if (client->build_manifest) {
+		plist_free(client->build_manifest);
+	}
+	if (client->preflight_info) {
+		plist_free(client->preflight_info);
 	}
 	free(client);
 }
@@ -1760,6 +1768,10 @@ int main(int argc, char* argv[]) {
 			ipsw_info = 1;
 			break;
 
+		case 1:
+			client->flags |= FLAG_IGNORE_ERRORS;
+			break;
+
 		default:
 			usage(argc, argv, 1);
 			return EXIT_FAILURE;
@@ -1789,6 +1801,8 @@ int main(int argc, char* argv[]) {
 		error("ERROR: You can't use --custom and --latest options at the same time.\n");
 		return EXIT_FAILURE;
 	}
+
+	info("%s %s\n", PACKAGE_NAME, PACKAGE_VERSION);
 
 	if (ipsw) {
 		client->ipsw = strdup(ipsw);
@@ -2021,29 +2035,7 @@ int get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce,
 	return 0;
 }
 
-plist_t build_manifest_get_build_identity(plist_t build_manifest, uint32_t identity) {
-    // fetch build identities array from BuildManifest
-    plist_t build_identities_array = plist_dict_get_item(build_manifest, "BuildIdentities");
-    if (!build_identities_array || plist_get_node_type(build_identities_array) != PLIST_ARRAY) {
-        error("ERROR: Unable to find build identities node\n");
-        return NULL;
-    }
-
-    // check and make sure this identity exists in buildmanifest
-    if (identity >= plist_array_get_size(build_identities_array)) {
-        return NULL;
-    }
-
-    plist_t build_identity = plist_array_get_item(build_identities_array, identity);
-    if (!build_identity || plist_get_node_type(build_identity) != PLIST_DICT) {
-        error("ERROR: Unable to find build identities node\n");
-        return NULL;
-    }
-
-    return plist_copy(build_identity);
-}
-
-plist_t build_manifest_get_build_identity_for_model_with_restore_behavior(plist_t build_manifest, const char *hardware_model, const char *behavior)
+plist_t build_manifest_get_build_identity_for_model_with_variant(plist_t build_manifest, const char *hardware_model, const char *variant)
 {
 	plist_t build_identities_array = plist_dict_get_item(build_manifest, "BuildIdentities");
 	if (!build_identities_array || plist_get_node_type(build_identities_array) != PLIST_ARRAY) {
@@ -2065,103 +2057,27 @@ plist_t build_manifest_get_build_identity_for_model_with_restore_behavior(plist_
 		if (!devclass || plist_get_node_type(devclass) != PLIST_STRING) {
 			continue;
 		}
-		char *str = NULL;
-		plist_get_string_val(devclass, &str);
+		const char *str = plist_get_string_ptr(devclass, NULL);
 		if (strcasecmp(str, hardware_model) != 0) {
-			free(str);
 			continue;
 		}
-		free(str);
-		str = NULL;
-		if (behavior) {
-			plist_t rbehavior = plist_dict_get_item(info_dict, "RestoreBehavior");
-			if (!rbehavior || plist_get_node_type(rbehavior) != PLIST_STRING) {
+		if (variant) {
+			plist_t rvariant = plist_dict_get_item(info_dict, "Variant");
+			if (!rvariant || plist_get_node_type(rvariant) != PLIST_STRING) {
 				continue;
 			}
-			plist_get_string_val(rbehavior, &str);
-			if (strcasecmp(str, behavior) != 0) {
-				free(str);
+			str = plist_get_string_ptr(rvariant, NULL);
+			if (strcmp(str, variant) != 0) {
+				/* if it's not a full match, let's try a partial match */
+				if (strstr(str, variant)) {
+					return ident;
+				}
 				continue;
 			} else {
-				free(str);
-				return plist_copy(ident);
-			}
-			free(str);
-		} else {
-			return plist_copy(ident);
-		}
-	}
-
-	return NULL;
-}
-
-plist_t build_manifest_get_build_identity_for_model_with_restore_behavior_and_global_signing(
-		plist_t build_manifest,
-		const char *hardware_model,
-		const char *behavior,
-		uint8_t global_signing)
-{
-	plist_t build_identities_array = plist_dict_get_item(build_manifest, "BuildIdentities");
-	if (!build_identities_array || plist_get_node_type(build_identities_array) != PLIST_ARRAY) {
-		error("ERROR: Unable to find build identities node\n");
-		return NULL;
-	}
-
-	uint32_t i;
-	for (i = 0; i < plist_array_get_size(build_identities_array); i++) {
-		plist_t ident = plist_array_get_item(build_identities_array, i);
-		if (!ident || plist_get_node_type(ident) != PLIST_DICT) {
-			continue;
-		}
-		plist_t info_dict = plist_dict_get_item(ident, "Info");
-		if (!info_dict || plist_get_node_type(ident) != PLIST_DICT) {
-			continue;
-		}
-		plist_t devclass = plist_dict_get_item(info_dict, "DeviceClass");
-		if (!devclass || plist_get_node_type(devclass) != PLIST_STRING) {
-			continue;
-		}
-		char *str = NULL;
-		plist_get_string_val(devclass, &str);
-		if (strcasecmp(str, hardware_model) != 0) {
-			free(str);
-			continue;
-		}
-		free(str);
-		str = NULL;
-
-		plist_t global_signing_node = plist_dict_get_item(info_dict, "VariantSupportsGlobalSigning");
-		if (!global_signing_node) {
-			if (global_signing) {
-				continue;
+				return ident;
 			}
 		} else {
-			uint8_t is_global_signing;
-			plist_get_bool_val(global_signing_node, &is_global_signing);
-
-			if (global_signing && !is_global_signing) {
-				continue;
-			} else if (!global_signing && is_global_signing) {
-				continue;
-			}
-		}
-
-		if (behavior) {
-			plist_t rbehavior = plist_dict_get_item(info_dict, "RestoreBehavior");
-			if (!rbehavior || plist_get_node_type(rbehavior) != PLIST_STRING) {
-				continue;
-			}
-			plist_get_string_val(rbehavior, &str);
-			if (strcasecmp(str, behavior) != 0) {
-				free(str);
-				continue;
-			} else {
-				free(str);
-				return plist_copy(ident);
-			}
-			free(str);
-		} else {
-			return plist_copy(ident);
+			return ident;
 		}
 	}
 
@@ -2170,7 +2086,7 @@ plist_t build_manifest_get_build_identity_for_model_with_restore_behavior_and_gl
 
 plist_t build_manifest_get_build_identity_for_model(plist_t build_manifest, const char *hardware_model)
 {
-	return build_manifest_get_build_identity_for_model_with_restore_behavior(build_manifest, hardware_model, NULL);
+	return build_manifest_get_build_identity_for_model_with_variant(build_manifest, hardware_model, NULL);
 }
 
 int get_preboard_manifest(struct idevicerestore_client_t* client, plist_t build_identity, plist_t* manifest)
@@ -2382,50 +2298,20 @@ int get_tss_response(struct idevicerestore_client_t* client, plist_t build_ident
 		plist_t pinfo = NULL;
 		normal_get_preflight_info(client, &pinfo);
 		if (pinfo) {
-			plist_t node;
-			node = plist_dict_get_item(pinfo, "Nonce");
-			if (node) {
-				plist_dict_set_item(parameters, "BbNonce", plist_copy(node));
-			}
-			node = plist_dict_get_item(pinfo, "ChipID");
-			if (node) {
-				plist_dict_set_item(parameters, "BbChipID", plist_copy(node));
-			}
-			node = plist_dict_get_item(pinfo, "CertID");
-			if (node) {
-				plist_dict_set_item(parameters, "BbGoldCertId", plist_copy(node));
-			}
-			node = plist_dict_get_item(pinfo, "ChipSerialNo");
-			if (node) {
-				plist_dict_set_item(parameters, "BbSNUM", plist_copy(node));
-			}
+			_plist_dict_copy_data(parameters, pinfo, "BbNonce", "Nonce");
+			_plist_dict_copy_uint(parameters, pinfo, "BbChipID", "ChipID");
+			_plist_dict_copy_uint(parameters, pinfo, "BbGoldCertId", "CertID");
+			_plist_dict_copy_data(parameters, pinfo, "BbSNUM", "ChipSerialNo");
 
 			/* add baseband parameters */
 			tss_request_add_baseband_tags(request, parameters, NULL);
 
-			node = plist_dict_get_item(pinfo, "EUICCChipID");
-			uint64_t euiccchipid = 0;
-			if (node && plist_get_node_type(node) == PLIST_UINT) {
-				plist_get_uint_val(node, &euiccchipid);
-				plist_dict_set_item(parameters, "eUICC,ChipID", plist_copy(node));
-			}
-			if (euiccchipid >= 5) {
-				node = plist_dict_get_item(pinfo, "EUICCCSN");
-				if (node) {
-					plist_dict_set_item(parameters, "eUICC,EID", plist_copy(node));
-				}
-				node = plist_dict_get_item(pinfo, "EUICCCertIdentifier");
-				if (node) {
-					plist_dict_set_item(parameters, "eUICC,RootKeyIdentifier", plist_copy(node));
-				}
-				node = plist_dict_get_item(pinfo, "EUICCGoldNonce");
-				if (node) {
-					plist_dict_set_item(parameters, "EUICCGoldNonce", plist_copy(node));
-				}
-				node = plist_dict_get_item(pinfo, "EUICCMainNonce");
-				if (node) {
-					plist_dict_set_item(parameters, "EUICCMainNonce", plist_copy(node));
-				}
+			_plist_dict_copy_uint(parameters, pinfo, "eUICC,ChipID", "EUICCChipID");
+			if (_plist_dict_get_uint(parameters, "eUICC,ChipID") >= 5) {
+				_plist_dict_copy_data(parameters, pinfo, "eUICC,EID", "EUICCCSN");
+				_plist_dict_copy_data(parameters, pinfo, "eUICC,RootKeyIdentifier", "EUICCCertIdentifier");
+				_plist_dict_copy_data(parameters, pinfo, "EUICCGoldNonce", NULL);
+				_plist_dict_copy_data(parameters, pinfo, "EUICCMainNonce", NULL);
 
 				/* add vinyl parameters */
 				tss_request_add_vinyl_tags(request, parameters, NULL);
@@ -2581,11 +2467,8 @@ int get_recovery_os_local_policy_tss_response(
 	plist_dict_set_item(lpol, "Trusted", plist_new_bool(1));
 	plist_dict_set_item(parameters, "Ap,LocalPolicy", lpol);
 
-	plist_t im4m_hash = plist_dict_get_item(args, "Ap,NextStageIM4MHash");
-	plist_dict_set_item(parameters, "Ap,NextStageIM4MHash", plist_copy(im4m_hash));
-
-	plist_t nonce_hash = plist_dict_get_item(args, "Ap,RecoveryOSPolicyNonceHash");
-	plist_dict_set_item(parameters, "Ap,RecoveryOSPolicyNonceHash", plist_copy(nonce_hash));
+	_plist_dict_copy_data(parameters, args, "Ap,NextStageIM4MHash", NULL);
+	_plist_dict_copy_data(parameters, args, "Ap,RecoveryOSPolicyNonceHash", NULL);
 
 	plist_t vol_uuid_node = plist_dict_get_item(args, "Ap,VolumeUUID");
 	char* vol_uuid_str = NULL;
@@ -2762,8 +2645,6 @@ int build_manifest_get_identity_count(plist_t build_manifest)
 		error("ERROR: Unable to find build identities node\n");
 		return -1;
 	}
-
-	// check and make sure this identity exists in buildmanifest
 	return plist_array_get_size(build_identities_array);
 }
 

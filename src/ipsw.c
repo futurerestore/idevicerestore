@@ -31,6 +31,8 @@
 #include <errno.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include <zip.h>
 #ifdef HAVE_OPENSSL
 #include <openssl/sha.h>
@@ -43,13 +45,13 @@
 #endif
 
 #include <libimobiledevice-glue/termcolors.h>
+#include <plist/plist.h>
 
 #include "ipsw.h"
 #include "locking.h"
 #include "download.h"
 #include "common.h"
 #include "idevicerestore.h"
-#include "json_plist.h"
 
 #define BUFSIZE 0x100000
 
@@ -150,10 +152,10 @@ int ipsw_print_info(const char* path)
 		plist_get_string_val(val, &build_ver);
 	}
 
-	cprintf(COLOR_WHITE "Product Version: " COLOR_BRIGHT_YELLOW "%s" COLOR_RESET COLOR_WHITE "   Build: " COLOR_BRIGHT_YELLOW "%s" COLOR_RESET "\n", prod_ver, build_ver);
+	cprintf(FG_WHITE "Product Version: " FG_BRIGHT_YELLOW "%s" COLOR_RESET FG_WHITE "   Build: " FG_BRIGHT_YELLOW "%s" COLOR_RESET "\n", prod_ver, build_ver);
 	free(prod_ver);
 	free(build_ver);
-	cprintf(COLOR_WHITE "Supported Product Types:" COLOR_RESET);
+	cprintf(FG_WHITE "Supported Product Types:" COLOR_RESET);
 	val = plist_dict_get_item(manifest, "SupportedProductTypes");
 	if (val) {
 		plist_array_iter iter = NULL;
@@ -165,7 +167,7 @@ int ipsw_print_info(const char* path)
 				if (item) {
 					char* item_str = NULL;
 					plist_get_string_val(item, &item_str);
-					cprintf(" " COLOR_BRIGHT_CYAN "%s" COLOR_RESET, item_str);
+					cprintf(" " FG_BRIGHT_CYAN "%s" COLOR_RESET, item_str);
 					free(item_str);
 				}
 			} while (item);
@@ -174,7 +176,7 @@ int ipsw_print_info(const char* path)
 	}
 	cprintf("\n");
 
-	cprintf(COLOR_WHITE "Build Identities:" COLOR_RESET "\n");
+	cprintf(FG_WHITE "Build Identities:" COLOR_RESET "\n");
 
 	plist_t build_ids_grouped = plist_new_dict();
 
@@ -230,7 +232,7 @@ int ipsw_print_info(const char* path)
 			group_no++;
 			node = plist_dict_get_item(group, "RestoreBehavior");
 			plist_get_string_val(node, &rbehavior);
-			cprintf("  " COLOR_WHITE "[%d] Variant: " COLOR_BRIGHT_CYAN "%s" COLOR_WHITE "   Behavior: " COLOR_BRIGHT_CYAN "%s" COLOR_RESET "\n", group_no, key, rbehavior);
+			cprintf("  " FG_WHITE "[%d] Variant: " FG_BRIGHT_CYAN "%s" FG_WHITE "   Behavior: " FG_BRIGHT_CYAN "%s" COLOR_RESET "\n", group_no, key, rbehavior);
 			free(key);
 			free(rbehavior);
 
@@ -283,9 +285,9 @@ int ipsw_print_info(const char* path)
 
 				irecv_device_t irecvdev = NULL;
 				if (irecv_devices_get_device_by_hardware_model(hwmodel, &irecvdev) == 0) {
-					cprintf("    ChipID: " COLOR_GREEN "%04x" COLOR_RESET "   BoardID: " COLOR_GREEN "%02x" COLOR_RESET "   Model: " COLOR_YELLOW "%-8s" COLOR_RESET "  " COLOR_MAGENTA "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel, irecvdev->display_name);
+					cprintf("    ChipID: " FG_GREEN "%04x" COLOR_RESET "   BoardID: " FG_GREEN "%02x" COLOR_RESET "   Model: " FG_YELLOW "%-8s" COLOR_RESET "  " FG_MAGENTA "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel, irecvdev->display_name);
 				} else {
-					cprintf("    ChipID: " COLOR_GREEN "%04x" COLOR_RESET "   BoardID: " COLOR_GREEN "%02x" COLOR_RESET "   Model: " COLOR_YELLOW "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel);
+					cprintf("    ChipID: " FG_GREEN "%04x" COLOR_RESET "   BoardID: " FG_GREEN "%02x" COLOR_RESET "   Model: " FG_YELLOW "%s" COLOR_RESET "\n", (int)chip_id, (int)board_id, hwmodel);
 				}
 				free(hwmodel);
 			} while (build_id);
@@ -627,41 +629,59 @@ int ipsw_extract_to_memory(const char* ipsw, const char* infile, unsigned char**
 		zip_fclose(zfile);
 	} else {
 		char *filepath = build_path(archive->path, infile);
-		FILE *f = fopen(filepath, "rb");
-		if (!f) {
-			error("ERROR: %s: fopen failed for %s: %s\n", __func__, filepath, strerror(errno));
-			free(filepath);
-			ipsw_close(archive);
-			return -2;
-		}
 		struct stat fst;
-		if (fstat(fileno(f), &fst) != 0) {
-			fclose(f);
-			error("ERROR: %s: fstat failed for %s: %s\n", __func__, filepath, strerror(errno));
+#ifdef WIN32
+		if (stat(filepath, &fst) != 0) {
+#else
+		if (lstat(filepath, &fst) != 0) {
+#endif
+			error("ERROR: %s: stat failed for %s: %s\n", __func__, filepath, strerror(errno));
 			free(filepath);
 			ipsw_close(archive);
 			return -1;
 		}
-
 		size = fst.st_size;
 		buffer = (unsigned char*)malloc(size+1);
 		if (buffer == NULL) {
 			error("ERROR: Out of memory\n");
-			fclose(f);
 			free(filepath);
 			ipsw_close(archive);
 			return -1;
 		}
-		if (fread(buffer, 1, size, f) != size) {
+
+#ifndef WIN32
+		if (S_ISLNK(fst.st_mode)) {
+			if (readlink(filepath, (char*)buffer, size) < 0) {
+				error("ERROR: %s: readlink failed for %s: %s\n", __func__, filepath, strerror(errno));
+				free(filepath);
+				free(buffer);
+				ipsw_close(archive);
+				return -1;
+			}
+		} else {
+#endif
+			FILE *f = fopen(filepath, "rb");
+			if (!f) {
+				error("ERROR: %s: fopen failed for %s: %s\n", __func__, filepath, strerror(errno));
+				free(filepath);
+				free(buffer);
+				ipsw_close(archive);
+				return -2;
+			}
+			if (fread(buffer, 1, size, f) != size) {
+				fclose(f);
+				error("ERROR: %s: fread failed for %s: %s\n", __func__, filepath, strerror(errno));
+				free(filepath);
+				free(buffer);
+				ipsw_close(archive);
+				return -1;
+			}
 			fclose(f);
-			error("ERROR: %s: fread failed for %s: %s\n", __func__, filepath, strerror(errno));
-			free(filepath);
-			ipsw_close(archive);
-			return -1;
+#ifndef WIN32
 		}
+#endif
 		buffer[size] = '\0';
 
-		fclose(f);
 		free(filepath);
 	}
 	ipsw_close(archive);
@@ -715,6 +735,128 @@ int ipsw_extract_restore_plist(const char* ipsw, plist_t* restore_plist)
 	return -1;
 }
 
+static int ipsw_list_contents_recurse(ipsw_archive *archive, const char *path, ipsw_list_cb cb, void *ctx)
+{
+	int ret = 0;
+	char *base = build_path(archive->path, path);
+
+	DIR *dirp = opendir(base);
+
+	if (!dirp) {
+		error("ERROR: failed to open directory %s\n", base);
+		free(base);
+		return -1;
+	}
+
+	while (ret >= 0) {
+		struct dirent *dir = readdir(dirp);
+		if (!dir)
+			break;
+
+		if (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, ".."))
+			continue;
+
+		char *fpath = build_path(base, dir->d_name);
+		char *subpath;
+		if (*path)
+			subpath = build_path(path, dir->d_name);
+		else
+			subpath = strdup(dir->d_name);
+
+		struct stat st;
+#ifdef WIN32
+		ret = stat(fpath, &st);
+#else
+		ret = lstat(fpath, &st);
+#endif
+		if (ret != 0) {
+			error("ERROR: %s: stat failed for %s: %s\n", __func__, fpath, strerror(errno));
+			free(fpath);
+			free(subpath);
+			break;
+		}
+
+		ret = cb(ctx, archive->path, subpath, &st);
+
+		if (ret >= 0 && S_ISDIR(st.st_mode))
+			ipsw_list_contents_recurse(archive, subpath, cb, ctx);
+
+		free(fpath);
+		free(subpath);
+	}
+
+	closedir(dirp);
+	free(base);
+	return ret;
+}
+
+int ipsw_list_contents(const char* ipsw, ipsw_list_cb cb, void *ctx)
+{
+	int ret = 0;
+
+	ipsw_archive* archive = ipsw_open(ipsw);
+	if (archive == NULL) {
+		error("ERROR: Invalid archive\n");
+		return -1;
+	}
+
+	if (archive->zip) {
+        int64_t entries = zip_get_num_entries(archive->zip, 0);
+		if (entries < 0) {
+			error("ERROR: zip_get_num_entries failed\n");
+			ipsw_close(archive);
+			return -1;
+		}
+
+		for (int64_t index = 0; index < entries; index++) {
+			zip_stat_t stat;
+
+			zip_stat_init(&stat);
+			if (zip_stat_index(archive->zip, index, 0, &stat) < 0) {
+				error("ERROR: zip_stat_index failed for %s\n", stat.name);
+				ret = -1;
+				continue;
+			}
+
+			uint8_t opsys;
+			uint32_t attributes;
+			if (zip_file_get_external_attributes(archive->zip, index, 0, &opsys, &attributes) < 0) {
+				error("ERROR: zip_file_get_external_attributes failed for %s\n", stat.name);
+				ret = -1;
+				continue;
+			}
+			if (opsys != ZIP_OPSYS_UNIX) {
+				error("ERROR: File %s does not have UNIX attributes\n", stat.name);
+				ret = -1;
+				continue;
+			}
+
+			struct stat st;
+			memset(&st, 0, sizeof(st));
+			st.st_ino = 1 + index;
+			st.st_nlink = 1;
+			st.st_mode = attributes >> 16;
+			st.st_size = stat.size;
+
+			char *name = strdup(stat.name);
+			if (name[strlen(name) - 1] == '/')
+				name[strlen(name) - 1] = '\0';
+
+			ret = cb(ctx, ipsw, name, &st);
+
+			free(name);
+
+			if (ret < 0)
+				break;
+		}
+	} else {
+		ret = ipsw_list_contents_recurse(archive, "", cb, ctx);
+	}
+
+	ipsw_close(archive);
+	return ret;
+}
+
 void ipsw_close(ipsw_archive* archive)
 {
 	if (archive != NULL) {
@@ -735,6 +877,7 @@ int ipsw_get_signed_firmwares(const char* product, plist_t* firmwares)
 	plist_t dict = NULL;
 	plist_t node = NULL;
 	plist_t fws = NULL;
+	const char* product_type = NULL;
 	uint32_t count = 0;
 	uint32_t i = 0;
 
@@ -743,13 +886,13 @@ int ipsw_get_signed_firmwares(const char* product, plist_t* firmwares)
 	}
 
 	*firmwares = NULL;
-	snprintf(url, sizeof(url), "https://api.ipsw.me/v3/device/%s", product);
+	snprintf(url, sizeof(url), "https://api.ipsw.me/v4/device/%s", product);
 
 	if (download_to_buffer(url, &jdata, &jsize) < 0) {
 		error("ERROR: Download from %s failed.\n", url);
 		return -1;
 	}
-	dict = json_to_plist(jdata);
+	plist_from_json(jdata, jsize, &dict);
 	free(jdata);
 	if (!dict || plist_get_node_type(dict) != PLIST_DICT) {
 		error("ERROR: Failed to parse json data.\n");
@@ -757,15 +900,21 @@ int ipsw_get_signed_firmwares(const char* product, plist_t* firmwares)
 		return -1;
 	}
 
-	node = plist_dict_get_item(dict, product);
-	if (!node || plist_get_node_type(node) != PLIST_DICT) {
-		error("ERROR: Unexpected json data returned?!\n");
+	node = plist_dict_get_item(dict, "identifier");
+	if (!node || plist_get_node_type(node) != PLIST_STRING) {
+		error("ERROR: Unexpected json data returned - missing 'identifier'\n");
 		plist_free(dict);
 		return -1;
 	}
-	fws = plist_dict_get_item(node, "firmwares");
+	product_type = plist_get_string_ptr(node, NULL);
+	if (!product_type || strcmp(product_type, product) != 0) {
+		error("ERROR: Unexpected json data returned - failed to read identifier\n");
+		plist_free(dict);
+		return -1;
+	}
+	fws = plist_dict_get_item(dict, "firmwares");
 	if (!fws || plist_get_node_type(fws) != PLIST_ARRAY) {
-		error("ERROR: Unexpected json data returned?!\n");
+		error("ERROR: Unexpected json data returned - missing 'firmwares'\n");
 		plist_free(dict);
 		return -1;
 	}

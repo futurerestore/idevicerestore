@@ -30,6 +30,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <libimobiledevice/restore.h>
+#ifdef HAVE_REVERSE_PROXY
+#include <libimobiledevice/reverse_proxy.h>
+#else
+#warning Linking against libimobiledevice without reverse proxy support. Please update to a newer version of libimobiledevice, the legacy code used will be removed in a future version of idevicerestore.
+#endif
 #include <zip.h>
 #include <libirecovery.h>
 
@@ -372,8 +377,8 @@ static int restore_is_current_device(struct idevicerestore_client_t* client, con
 	if (!client) {
 		return 0;
 	}
-	if (!client->srnm) {
-		error("ERROR: %s: no SerialNumber given in client data\n", __func__);
+	if (!client->ecid) {
+		error("ERROR: %s: no ECID given in client data\n", __func__);
 		return 0;
 	}
 
@@ -406,35 +411,35 @@ static int restore_is_current_device(struct idevicerestore_client_t* client, con
 		return 0;
 	}
 
-	plist_t node = NULL;
-	restore_error = restored_get_value(restored, "SerialNumber", &node);
-	if ((restore_error != RESTORE_E_SUCCESS) || !node || (plist_get_node_type(node) != PLIST_STRING)) {
-		error("ERROR: %s: Unable to get SerialNumber from restored\n", __func__);
+	plist_t hwinfo = NULL;
+	restore_error = restored_query_value(restored, "HardwareInfo", &hwinfo);
+	if ((restore_error != RESTORE_E_SUCCESS) || !hwinfo) {
+		error("ERROR: %s: Unable to get HardwareInfo from restored\n", __func__);
 		restored_client_free(restored);
 		idevice_free(device);
-		if (node) {
-			plist_free(node);
-		}
+		plist_free(hwinfo);
 		return 0;
 	}
 	restored_client_free(restored);
 	idevice_free(device);
 
-	char* this_srnm = NULL;
-	plist_get_string_val(node, &this_srnm);
-	plist_free(node);
+	uint64_t this_ecid = 0;
+	plist_t node = plist_dict_get_item(hwinfo, "UniqueChipID");
+	if (node && plist_get_node_type(node) == PLIST_UINT) {
+		plist_get_uint_val(node, &this_ecid);
+	}
+	plist_free(hwinfo);
 
-	if (!this_srnm) {
+	if (this_ecid == 0) {
+		error("ERROR: %s: Unable to get ECID from restored\n", __func__);
 		return 0;
 	}
 
-	return (strcasecmp(this_srnm, client->srnm) == 0);
+	return (this_ecid == client->ecid);
 }
 
 int restore_open_with_timeout(struct idevicerestore_client_t* client)
 {
-	int i = 0;
-	int attempts = 180;
 	char *type = NULL;
 	uint64_t version = 0;
 	idevice_t device = NULL;
@@ -1099,7 +1104,7 @@ int restore_send_component(restored_client_t restore, struct idevicerestore_clie
 	return 0;
 }
 
-int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity)
+int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity, plist_t message)
 {
 	char* llb_path = NULL;
 	char* llb_filename = NULL;
@@ -1117,9 +1122,14 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 	unsigned char* nor_data = NULL;
 	plist_t norimage = NULL;
 	plist_t firmware_files = NULL;
-	uint32_t i;
+	int flash_version_1 = 0;
 
 	info("About to send NORData...\n");
+
+	plist_t arguments = plist_dict_get_item(message, "Arguments");
+	if (arguments && plist_get_node_type(arguments) == PLIST_DICT) {
+		flash_version_1 = plist_dict_get_item(arguments, "FlashVersion1") ? 1 : 0;
+	}
 
 	if (client->tss) {
 		if (tss_response_get_path_by_entry(client->tss, "LLB", &llb_path) < 0) {
@@ -1239,9 +1249,7 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 	plist_dict_set_item(dict, "LlbImageData", plist_new_data((char*)llb_data, (uint64_t) llb_size));
 	free(llb_data);
 
-	if (client->build_major >= 20) {
-		// Starting with M1 macs, it seems that NorImageData is now a dict.
-		// Sending an array like previous versions results in restore success but the machine will SOS after rebooting.
+	if (flash_version_1) {
 		norimage = plist_new_dict();
 	} else {
 		norimage = plist_new_array();
@@ -1296,7 +1304,7 @@ int restore_send_nor(restored_client_t restore, struct idevicerestore_client_t* 
 		component_data = NULL;
 		component_size = 0;
 
-		if (client->build_major >= 20) {
+		if (flash_version_1) {
 			plist_dict_set_item(norimage, component, plist_new_data((char*)nor_data, (uint64_t)nor_size));
 		} else {
 		/* make sure iBoot is the first entry in the array */
@@ -2269,7 +2277,6 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 	plist_t parameters = NULL;
 	plist_t request = NULL;
 	plist_t response = NULL;
-	plist_t node = NULL;
 	int ret;
 	int latestManifest = 0;
 
@@ -2401,13 +2408,11 @@ static plist_t restore_get_yonkers_firmware_data(restored_client_t restore, stru
 {
 	char *comp_name = NULL;
 	char *comp_path = NULL;
-	plist_t comp_node = NULL;
 	unsigned char* component_data = NULL;
 	unsigned int component_size = 0;
 	plist_t parameters = NULL;
 	plist_t request = NULL;
 	plist_t response = NULL;
-	plist_t node = NULL;
 	int ret;
 
 	/* create Yonkers request */
@@ -2485,7 +2490,6 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 {
 	char *comp_name = NULL;
 	char *comp_path = NULL;
-	plist_t comp_node = NULL;
 	unsigned char* component_data = NULL;
 	unsigned int component_size = 0;
 	ftab_t ftab = NULL;
@@ -2494,7 +2498,6 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 	plist_t parameters = NULL;
 	plist_t request = NULL;
 	plist_t response = NULL;
-	plist_t node = NULL;
 	int ret;
 	int latestManifest = 0;
 
@@ -2673,13 +2676,11 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 {
 	char *comp_name = "BMU,FirmwareMap";
 	char *comp_path = NULL;
-	plist_t comp_node = NULL;
 	unsigned char* component_data = NULL;
 	unsigned int component_size = 0;
 	plist_t parameters = NULL;
 	plist_t request = NULL;
 	plist_t response = NULL;
-	plist_t node = NULL;
 	int ret;
 	int latestManifest = 0;
 
@@ -2815,13 +2816,11 @@ static plist_t restore_get_tcon_firmware_data(restored_client_t restore, struct 
 {
 	char *comp_name = "Baobab,TCON";
 	char *comp_path = NULL;
-	plist_t comp_node = NULL;
 	unsigned char* component_data = NULL;
 	unsigned int component_size = 0;
 	plist_t parameters = NULL;
 	plist_t request = NULL;
 	plist_t response = NULL;
-	plist_t node = NULL;
 	int ret;
 
 	/* create Baobab request */
@@ -2873,6 +2872,191 @@ static plist_t restore_get_tcon_firmware_data(restored_client_t restore, struct 
 		error("ERROR: Unable to extract '%s' component\n", comp_name);
 		return NULL;
 	}
+
+	plist_dict_set_item(response, "FirmwareData", plist_new_data((char *)component_data, (uint64_t)component_size));
+	free(component_data);
+	component_data = NULL;
+	component_size = 0;
+
+	return response;
+}
+
+static plist_t restore_get_timer_firmware_data(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity, plist_t p_info)
+{
+	char comp_name[64];
+	char *comp_path = NULL;
+	unsigned char* component_data = NULL;
+	unsigned int component_size = 0;
+	ftab_t ftab = NULL;
+	ftab_t rftab = NULL;
+	uint32_t ftag = 0;
+	plist_t parameters = NULL;
+	plist_t request = NULL;
+	plist_t response = NULL;
+	const char* ticket_name = NULL;
+	uint32_t tag = 0;
+	int ret;
+
+	/* create Timer request */
+	request = tss_request_new(NULL);
+	if (request == NULL) {
+		error("ERROR: Unable to create Timer TSS request\n");
+		return NULL;
+	}
+
+	parameters = plist_new_dict();
+
+	/* add manifest for current build_identity to parameters */
+	tss_parameters_add_from_manifest(parameters, build_identity);
+
+	plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
+	if (client->image4supported) {
+		plist_dict_set_item(parameters, "ApSecurityMode", plist_new_bool(1));
+		plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(1));
+	} else {
+		plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(0));
+	}
+
+	/* add Timer,* tags from info dictionary to parameters */
+	plist_t info_array = plist_dict_get_item(p_info, "InfoArray");
+	if (!info_array) {
+		error("ERROR: Could not find InfoArray in info dictionary\n");
+		plist_free(parameters);
+		return NULL;
+	} else {
+		plist_t info_dict = plist_array_get_item(info_array, 0);
+		plist_t hwid = plist_dict_get_item(info_dict, "HardwareID");
+		tag = (uint32_t)_plist_dict_get_uint(info_dict, "TagNumber");
+		char key[64];
+
+		plist_dict_set_item(parameters, "TagNumber", plist_new_uint(tag));
+		plist_t node = plist_dict_get_item(info_dict, "TicketName");
+		if (node) {
+			ticket_name = plist_get_string_ptr(node, NULL);
+			plist_dict_set_item(parameters, "TicketName", plist_copy(node));
+		}
+
+		sprintf(key, "Timer,ChipID,%u", tag);
+		_plist_dict_copy_uint(parameters, hwid, key, "ChipID");
+
+		sprintf(key, "Timer,BoardID,%u", tag);
+		_plist_dict_copy_uint(parameters, hwid, key, "BoardID");
+
+		sprintf(key, "Timer,ECID,%u", tag);
+		_plist_dict_copy_uint(parameters, hwid, key, "ECID");
+
+		sprintf(key, "Timer,Nonce,%u", tag);
+		_plist_dict_copy_data(parameters, hwid, key, "Nonce");
+
+		sprintf(key, "Timer,SecurityMode,%u", tag);
+		_plist_dict_copy_bool(parameters, hwid, key, "SecurityMode");
+
+		sprintf(key, "Timer,SecurityDomain,%u", tag);
+		_plist_dict_copy_uint(parameters, hwid, key, "SecurityDomain");
+
+		sprintf(key, "Timer,ProductionMode,%u", tag);
+		_plist_dict_copy_uint(parameters, hwid, key, "ProductionStatus");
+	}
+	plist_t ap_info = plist_dict_get_item(p_info, "APInfo");
+	if (!ap_info) {
+		error("ERROR: Could not find APInfo in info dictionary\n");
+		plist_free(parameters);
+		return NULL;
+	} else {
+		plist_dict_merge(parameters, ap_info);
+	}
+
+	/* add required tags for Timer TSS request */
+	tss_request_add_timer_tags(request, parameters, NULL);
+
+	plist_free(parameters);
+
+	info("Sending %s TSS request...\n", ticket_name);
+	response = tss_request_send(request, client->tss_url);
+	plist_free(request);
+	if (response == NULL) {
+		error("ERROR: Unable to fetch %s\n", ticket_name);
+		return NULL;
+	}
+
+	if (plist_dict_get_item(response, ticket_name)) {
+		info("Received %s\n", ticket_name);
+	} else {
+		error("ERROR: No '%s' in TSS response, this might not work\n", ticket_name);
+	}
+
+	sprintf(comp_name, "Timer,RTKitOS,%u", tag);
+	if (build_identity_has_component(build_identity, comp_name)) {
+		if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+			error("ERROR: Unable to get path for '%s' component\n", comp_name);
+			return NULL;
+		}
+		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+		free(comp_path);
+		comp_path = NULL;
+		if (ret < 0) {
+			error("ERROR: Unable to extract '%s' component\n", comp_name);
+			return NULL;
+		}
+		if (ftab_parse(component_data, component_size, &ftab, &ftag) != 0) {
+			free(component_data);
+			error("ERROR: Failed to parse '%s' component data.\n", comp_name);
+			return NULL;
+		}
+		free(component_data);
+		component_data = NULL;
+		component_size = 0;
+		if (ftag != 'rkos') {
+			error("WARNING: Unexpected tag 0x%08x, expected 0x%08x; continuing anyway.\n", ftag, 'rkos');
+		}
+	} else {
+		info("NOTE: Build identity does not have a '%s' component.\n", comp_name);
+	}
+
+	sprintf(comp_name, "Timer,RestoreRTKitOS,%u", tag);
+	if (build_identity_has_component(build_identity, comp_name)) {
+		if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+			ftab_free(ftab);
+			error("ERROR: Unable to get path for '%s' component\n", comp_name);
+			return NULL;
+		}
+		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+		free(comp_path);
+		comp_path = NULL;
+		if (ret < 0) {
+			ftab_free(ftab);
+			error("ERROR: Unable to extract '%s' component\n", comp_name);
+			return NULL;
+		}
+
+		ftag = 0;
+		if (ftab_parse(component_data, component_size, &rftab, &ftag) != 0) {
+			free(component_data);
+			ftab_free(ftab);
+			error("ERROR: Failed to parse '%s' component data.\n", comp_name);
+			return NULL;
+		}
+		free(component_data);
+		component_data = NULL;
+		component_size = 0;
+		if (ftag != 'rkos') {
+			error("WARNING: Unexpected tag 0x%08x, expected 0x%08x; continuing anyway.\n", ftag, 'rkos');
+		}
+
+		if (ftab_get_entry_ptr(rftab, 'rrko', &component_data, &component_size) == 0) {
+			ftab_add_entry(ftab, 'rrko', component_data, component_size);
+		} else {
+			error("ERROR: Could not find 'rrko' entry in ftab. This will probably break things.\n");
+		}
+		ftab_free(rftab);
+		component_data = NULL;
+		component_size = 0;
+	} else {
+		info("NOTE: Build identity does not have a '%s' component.\n", comp_name);
+	}
+
+	ftab_write(ftab, &component_data, &component_size);
+	ftab_free(ftab);
 
 	plist_dict_set_item(response, "FirmwareData", plist_new_data((char *)component_data, (uint64_t)component_size));
 	free(component_data);
@@ -2975,6 +3159,12 @@ static int restore_send_firmware_updater_data(restored_client_t restore, struct 
 			error("ERROR: %s: Couldn't get AppleTCON firmware data\n", __func__);
 			goto error_out;
 		}
+	} else if (strcmp(s_updater_name, "AppleTypeCRetimer") == 0) {
+		fwdict = restore_get_timer_firmware_data(restore, client, build_identity, p_info);
+		if (fwdict == NULL) {
+			error("ERROR: %s: Couldn't get AppleTypeCRetimer firmware data\n", __func__);
+			goto error_out;
+		}
 	} else {
 		error("ERROR: %s: Got unknown updater name '%s'.\n", __func__, s_updater_name);
 		goto error_out;
@@ -3003,22 +3193,170 @@ error_out:
 	return -1;
 }
 
-plist_t restore_get_build_identity(struct idevicerestore_client_t* client, uint8_t is_recover_os)
+struct cpio_odc_header {
+	char c_magic[6];
+	char c_dev[6];
+	char c_ino[6];
+	char c_mode[6];
+	char c_uid[6];
+	char c_gid[6];
+	char c_nlink[6];
+	char c_rdev[6];
+	char c_mtime[11];
+	char c_namesize[6];
+	char c_filesize[11];
+};
+
+static void octal(char *p, int width, int v)
 {
+	char buf[32];
+	snprintf(buf, 32, "%0*o", width, v);
+	memcpy(p, buf, width);
+}
+
+static int cpio_send_file(idevice_connection_t connection, const char *name, struct stat *st, void *data)
+{
+	struct cpio_odc_header hdr;
+
+	memset(&hdr, '0', sizeof(hdr));
+	memcpy(hdr.c_magic, "070707", 6);
+	octal(hdr.c_dev, 6, st->st_dev);
+	octal(hdr.c_ino, 6, st->st_ino);
+	octal(hdr.c_mode, 6, st->st_mode);
+	octal(hdr.c_uid, 6, st->st_uid);
+	octal(hdr.c_gid, 6, st->st_gid);
+	octal(hdr.c_nlink, 6, st->st_nlink);
+	octal(hdr.c_rdev, 6, st->st_rdev);
+	octal(hdr.c_mtime, 11, st->st_mtime);
+	octal(hdr.c_namesize, 6, strlen(name) + 1);
+	if (data)
+		octal(hdr.c_filesize, 11, st->st_size);
+
+	uint32_t bytes = 0;
+	int name_len = strlen(name) + 1;
+	idevice_error_t device_error;
+
+	device_error = idevice_connection_send(connection, (void *)&hdr, sizeof(hdr), &bytes);
+	if (device_error != IDEVICE_E_SUCCESS || bytes != sizeof(hdr)) {
+		error("ERROR: BootabilityBundle unable to send header. (%d) Sent %u of %lu bytes.\n", device_error, bytes, (long)sizeof(hdr));
+		return -1;
+	}
+
+	device_error = idevice_connection_send(connection, (void *)name, name_len, &bytes);
+	if (device_error != IDEVICE_E_SUCCESS || bytes != name_len) {
+		error("ERROR: BootabilityBundle unable to send filename. (%d) Sent %u of %u bytes.\n", device_error, bytes, name_len);
+		return -1;
+	}
+
+	if (st->st_size && data) {
+		device_error = idevice_connection_send(connection, data, st->st_size, &bytes);
+		if (device_error != IDEVICE_E_SUCCESS || bytes != st->st_size) {
+			error("ERROR: BootabilityBundle unable to send data. (%d) Sent %u of %lu bytes.\n", device_error, bytes, (long)st->st_size);
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+static int restore_bootability_send_one(void *ctx, const char *ipsw, const char *name, struct stat *stat)
+{
+	idevice_connection_t connection = (idevice_connection_t)ctx;
+	const char *prefix = "BootabilityBundle/Restore/Bootability/";
+	const char *subpath;
+
+	if (!strcmp(name, "BootabilityBundle/Restore/Firmware/Bootability.dmg.trustcache")) {
+		subpath = "Bootability.trustcache";
+	} else if (strncmp(name, prefix, strlen(prefix))) {
+		return 0;
+	} else {
+		subpath = name + strlen(prefix);
+	}
+
+	debug("DEBUG: BootabilityBundle send m=%07o s=%10ld %s\n", stat->st_mode, (long)stat->st_size, subpath);
+
+	unsigned char *buf = NULL;
 	unsigned int size = 0;
-	unsigned char* data = NULL;
-	plist_t buildmanifest = NULL;
-	ipsw_extract_to_memory(client->ipsw, "BuildManifest.plist", &data, &size);
-	plist_from_xml((char*)data, size, &buildmanifest);
-	free(data);
 
-	plist_t build_identity = build_manifest_get_build_identity_for_model_with_restore_behavior_and_global_signing(
-			buildmanifest,
+	if ((S_ISLNK(stat->st_mode) || S_ISREG(stat->st_mode)) && stat->st_size != 0) {
+		ipsw_extract_to_memory(ipsw, name, &buf, &size);
+		if (size != stat->st_size) {
+			error("ERROR: expected %ld bytes but got %d for file %s\n", (long)stat->st_size, size, name);
+			free(buf);
+			return -1;
+		}
+	}
+
+	stat->st_uid = stat->st_gid = 0;
+
+	int ret = cpio_send_file(connection, subpath, stat, buf);
+
+	free(buf);
+	return ret;
+}
+
+static int restore_send_bootability_bundle_data(restored_client_t restore, struct idevicerestore_client_t* client, plist_t build_identity, plist_t message, idevice_t device)
+{
+	if (idevicerestore_debug) {
+		debug("DEBUG: %s: Got BootabilityBundle request:\n", __func__);
+		debug_plist(message);
+	}
+
+	plist_t node = plist_dict_get_item(message, "DataPort");
+	uint64_t u64val = 0;
+	plist_get_uint_val(node, &u64val);
+	uint16_t data_port = (uint16_t)u64val;
+
+	int attempts = 10;
+	idevice_connection_t connection = NULL;
+	idevice_error_t device_error = IDEVICE_E_SUCCESS;
+
+	debug("Connecting to BootabilityBundle data port\n");
+	while (--attempts > 0) {
+		device_error = idevice_connect(device, data_port, &connection);
+		if (device_error == IDEVICE_E_SUCCESS) {
+			break;
+		}
+		sleep(1);
+		debug("Retrying connection...\n");
+	}
+	if (device_error != IDEVICE_E_SUCCESS) {
+		error("ERROR: Unable to connect to BootabilityBundle data port\n");
+		return -1;
+	}
+
+	int ret = ipsw_list_contents(client->ipsw, restore_bootability_send_one, connection);
+
+	if (ret < 0) {
+		error("ERROR: Failed to send BootabilityBundle\n");
+		return ret;
+	}
+
+	struct stat st = {.st_nlink = 1};
+	cpio_send_file(connection, "TRAILER!!!", &st, NULL);
+
+	idevice_disconnect(connection);
+
+    return 0;
+}
+
+plist_t restore_get_build_identity(struct idevicerestore_client_t* client, uint8_t is_recovery_os)
+{
+	const char *variant;
+
+	if (is_recovery_os)
+		variant = RESTORE_VARIANT_MACOS_RECOVERY_OS;
+	else if (client->flags & FLAG_ERASE)
+		variant = RESTORE_VARIANT_ERASE_INSTALL;
+	else
+		variant = RESTORE_VARIANT_UPGRADE_INSTALL;
+
+	plist_t build_identity = build_manifest_get_build_identity_for_model_with_variant(
+			client->build_manifest,
 			client->device->hardware_model,
-			client->flags & FLAG_ERASE ? "Erase": "Update",
-			is_recover_os);
+			variant);
 
-	plist_t unique_id_node = plist_dict_get_item(buildmanifest, "UniqueBuildID");
+	plist_t unique_id_node = plist_dict_get_item(client->build_manifest, "UniqueBuildID");
 	debug_plist(unique_id_node);
 
 	return build_identity;
@@ -3027,11 +3365,7 @@ plist_t restore_get_build_identity(struct idevicerestore_client_t* client, uint8
 plist_t restore_get_build_identity_from_request(struct idevicerestore_client_t* client, plist_t msg)
 {
 	plist_t args = plist_dict_get_item(msg, "Arguments");
-	plist_t is_recovery_node = plist_dict_get_item(args, "IsRecoveryOS");
-	uint8_t is_recovery = 0;
-	plist_get_bool_val(is_recovery_node, &is_recovery);
-
-	return restore_get_build_identity(client, is_recovery);
+	return restore_get_build_identity(client, _plist_dict_get_bool(args, "IsRecoveryOS"));
 }
 
 int extract_macos_variant(plist_t build_identity, char** output)
@@ -3178,7 +3512,7 @@ int restore_send_personalized_boot_object_v3(restored_client_t restore, struct i
 	}
 
 	// Make plist
-	info("Sending %s now...", component_name);
+	info("Sending %s now...\n", component_name);
 
 	int64_t i = size;
 	while (i > 0) {
@@ -3288,7 +3622,7 @@ int restore_send_source_boot_object_v4(restored_client_t restore, struct idevice
 	}
 
 	// Make plist
-	info("Sending %s now...", component_name);
+	info("Sending %s now...\n", component_name);
 
 	int64_t i = size;
 	while (i > 0) {
@@ -3509,7 +3843,7 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idev
 		        return 2;
 		    }
 			if((client->flags & FLAG_EXCLUDE) == 0) {
-				if(restore_send_nor(restore, client, build_identity) < 0) {
+				if(restore_send_nor(restore, client, build_identity, message) < 0) {
 					error("ERROR: Unable to send NOR data\n");
 					return -1;
 				}
@@ -3565,6 +3899,13 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, idev
 			}
 		}
 
+		else if (!strcmp(type, "BootabilityBundle")) {
+			if (restore_send_bootability_bundle_data(restore, client, build_identity, message, device) < 0) {
+				error("ERROR: Unable to send BootabilityBundle data\n");
+				return -1;
+			}
+		}
+
 		else {
 			error("Unknown data request '%s' received\n", type);
 			if (idevicerestore_debug)
@@ -3582,6 +3923,7 @@ plist_t restore_supported_data_types()
 	plist_dict_set_item(dict, "BasebandData", plist_new_bool(0));
 	plist_dict_set_item(dict, "BasebandStackData", plist_new_bool(0));
 	plist_dict_set_item(dict, "BasebandUpdaterOutputData", plist_new_bool(0));
+	plist_dict_set_item(dict, "BootabilityBundle", plist_new_bool(0));
 	plist_dict_set_item(dict, "BuildIdentityDict", plist_new_bool(0));
 	plist_dict_set_item(dict, "BuildIdentityDictV2", plist_new_bool(0));
 	plist_dict_set_item(dict, "DataType", plist_new_bool(0));
@@ -3655,6 +3997,18 @@ plist_t restore_supported_message_types()
 	return dict;
 }
 
+#ifdef HAVE_REVERSE_PROXY
+static void rp_log_cb(reverse_proxy_client_t client, const char* log_msg, void* user_data)
+{
+	info("ReverseProxy[%s]: %s\n", (reverse_proxy_get_type(client) == RP_TYPE_CTRL) ? "Ctrl" : "Conn", log_msg);
+}
+
+static void rp_status_cb(reverse_proxy_client_t client, reverse_proxy_status_t status, const char* status_msg, void* user_data)
+{
+	info("ReverseProxy[%s]: (status=%d) %s\n", (reverse_proxy_get_type(client) == RP_TYPE_CTRL) ? "Ctrl" : "Conn", status, status_msg);
+}
+#endif
+
 int restore_device(struct idevicerestore_client_t* client, plist_t build_identity, const char* filesystem)
 {
 	int err = 0;
@@ -3665,7 +4019,9 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	idevice_t device = NULL;
 	restored_client_t restore = NULL;
 	restored_error_t restore_error = RESTORE_E_SUCCESS;
+#ifndef HAVE_REVERSE_PROXY
 	THREAD_T fdr_thread = THREAD_T_NULL;
+#endif
 
 	restore_finished = 0;
 
@@ -3755,6 +4111,34 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 //		client->restore->bbtss = plist_copy(client->tss);
 //	}
 
+#ifdef HAVE_REVERSE_PROXY
+	info("Starting Reverse Proxy\n");
+	reverse_proxy_client_t rproxy = NULL;
+	if (reverse_proxy_client_create_with_port(device, &rproxy, REVERSE_PROXY_DEFAULT_PORT) != REVERSE_PROXY_E_SUCCESS) {
+		error("Could not create Reverse Proxy\n");
+	} else {
+		if (client->flags & FLAG_DEBUG) {
+			reverse_proxy_client_set_log_callback(rproxy, rp_log_cb, NULL);
+		}
+		reverse_proxy_client_set_status_callback(rproxy, rp_status_cb, NULL);
+		if (reverse_proxy_client_start_proxy(rproxy, 2) != REVERSE_PROXY_E_SUCCESS) {
+			error("Device didn't accept new reverse proxy protocol, trying to use old one\n");
+			reverse_proxy_client_free(rproxy);
+			rproxy = NULL;
+			if (reverse_proxy_client_create_with_port(device, &rproxy, REVERSE_PROXY_DEFAULT_PORT) != REVERSE_PROXY_E_SUCCESS) {
+				error("Could not create Reverse Proxy\n");
+			} else {
+				if (client->flags & FLAG_DEBUG) {
+					reverse_proxy_client_set_log_callback(rproxy, rp_log_cb, NULL);
+				}
+				reverse_proxy_client_set_status_callback(rproxy, rp_status_cb, NULL);
+				if (reverse_proxy_client_start_proxy(rproxy, 1) != REVERSE_PROXY_E_SUCCESS) {
+					error("ReverseProxy: Device didn't accept old protocol, giving up\n");
+				}
+			}
+		}
+	}
+#else
 	fdr_client_t fdr_control_channel = NULL;
 	info("Starting FDR listener thread\n");
 	if (!fdr_connect(device, FDR_CTRL, &fdr_control_channel)) {
@@ -3766,6 +4150,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		error("ERROR: Failed to start FDR Ctrl channel\n");
 		// FIXME: We might want to return failure here as it will likely fail
 	}
+#endif
 
 	plist_t opts = plist_new_dict();
 	// FIXME: required?
@@ -3773,7 +4158,6 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	plist_dict_set_item(opts, "AutoBootDelay", plist_new_uint(0));
 
 	if (client->preflight_info) {
-		plist_t node;
 		plist_t bbus = plist_copy(client->preflight_info);
 
 		plist_dict_remove_item(bbus, "FusingStatus");
@@ -3781,17 +4165,14 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 
 		plist_dict_set_item(opts, "BBUpdaterState", bbus);
 
-		node = plist_dict_get_item(client->preflight_info, "Nonce");
-		if (node) {
-			plist_dict_set_item(opts, "BasebandNonce", plist_copy(node));
-		}
+		_plist_dict_copy_data(opts, client->preflight_info, "BasebandNonce", "Nonce");
 	}
 
 	plist_dict_set_item(opts, "SupportedDataTypes", restore_supported_data_types());
 	plist_dict_set_item(opts, "SupportedMessageTypes", restore_supported_message_types());
 
 	// FIXME: Should be adjusted for update behaviors
-	if (client->build_major >= 20) {
+	if (client->macos_variant) {
 		plist_dict_set_item(opts, "AddSystemPartitionPadding", plist_new_bool(1));
 		plist_dict_set_item(opts, "AllowUntetheredRestore", plist_new_bool(0));
 		plist_dict_set_item(opts, "AuthInstallEnableSso", plist_new_bool(0));
@@ -3908,6 +4289,10 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 	// this is the restore process loop, it reads each message in from
 	// restored and passes that data on to it's specific handler
 	while (!(client->flags & FLAG_QUIT)) {
+		if (client->flags & FLAG_IGNORE_ERRORS) {
+			error("WARNING: Attempting to continue after critical error, restore might fail...\n");
+			err = 0;
+		}
 		// finally, if any of these message handlers returned -1 then we encountered
 		// an unrecoverable error, so we need to bail.
 		if (err < 0) {
@@ -4023,6 +4408,9 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		message = NULL;
 	}
 
+#ifdef HAVE_REVERSE_PROXY
+	reverse_proxy_client_free(rproxy);
+#else
 	if (thread_alive(fdr_thread)) {
 		if (fdr_control_channel) {
 			fdr_disconnect(fdr_control_channel);
@@ -4030,6 +4418,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 			fdr_control_channel = NULL;
 		}
 	}
+#endif
 
 	restore_client_free(client);
 	return err;

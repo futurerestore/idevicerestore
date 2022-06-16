@@ -12,8 +12,6 @@ then
   make -s -C cmake-build-release clean
   make -s -C cmake-build-release
   if [[ "$?" -gt 0 ]]; then echo "[!] Failed to build libidevicerestore!"; exit 1; fi
-  which llvm-strip >/dev/null
-  if [[ "$?" -lt 1 ]]; then llvm-strip -s cmake-build-release/src/libidevicerestore; else echo "[!] llvm-strip not installed or not found, not stripping release binary."; fi
   echo "[*] Run make -C cmake-build-release install, to install libidevicerestore or obtain the the static lib at cmake-build-release/src/libidevicerestore.a"
   echo "[*] Successfully built libidevicerestore."
 else
