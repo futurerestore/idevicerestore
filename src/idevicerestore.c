@@ -860,8 +860,8 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
         else
             plist_from_xml(opl, ostat->st_size, &buildmanifest2);
         free(ostat);
-        build_identity2 = build_manifest_get_build_identity(buildmanifest2, 0);
-        free(opl);
+        build_identity2 = build_manifest_get_build_identity_for_model(buildmanifest2, client->device->hardware_model);
+	free(opl);
     }
 
 	client->macos_variant = build_manifest_get_build_identity_for_model_with_variant(client->build_manifest, client->device->hardware_model, RESTORE_VARIANT_MACOS_RECOVERY_OS);
