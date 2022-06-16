@@ -17,12 +17,14 @@ if(NOT DEFINED SUBPROJECT_BUILD)
                 set(ARCH "${CMAKE_SYSTEM_PROCESSOR}")
             endif()
         endif()
-        if("${ARCH}" STREQUAL "x86_64" OR "$ENV{ARCH}" STREQUAL "x86_64")
-            set(MINVER -mmacosx-version-min=10.12)
-            set(CMAKE_OSX_DEPLOYMENT_TARGET 10.12)
-        else()
-            set(MINVER -mmacosx-version-min=11.0)
-            set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
+	if(NOT DEFINED MINVER OR NOT DEFINED "$ENV{MINVER}" AND DEFINED NO_PKGCFG AND "$ENV{NO_PKGCFG}" MATCHES "1")
+            if("${ARCH}" STREQUAL "x86_64" OR "$ENV{ARCH}" STREQUAL "x86_64")
+                set(MINVER -mmacosx-version-min=10.12)
+                set(CMAKE_OSX_DEPLOYMENT_TARGET 10.12)
+            else()
+                set(MINVER -mmacosx-version-min=11.0)
+                set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
+            endif()
         endif()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch ${ARCH} -isysroot ${SYSROOT} ${MINVER} -fembed-bitcode=off -flto=thin -pthread")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch ${ARCH} -isysroot ${SYSROOT} ${MINVER} -fembed-bitcode=off -flto=thin -pthread")
@@ -57,6 +59,17 @@ target_include_directories(idevicerestore PRIVATE
         src)
 target_link_directories(idevicerestore PRIVATE
         "${CMAKE_SOURCE_DIR}/dep_root/lib")
+if(NOT DEFINED NO_PKGCFG AND NOT "$ENV{NO_PKGCFG}" MATCHES "1")
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DEPS REQUIRED
+            libzip
+            libssl
+            libplist-2.0
+            libimobiledevice-glue-1.0
+            libimobiledevice-1.0
+            libirecovery-1.0)
+    target_include_directories(idevicerestore PRIVATE "${DEPS_INCLUDE_DIRS}")
+endif()
 execute_process(COMMAND git remote get-url origin WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/idevicerestore/src" OUTPUT_VARIABLE PACKAGE_URL1 OUTPUT_STRIP_TRAILING_WHITESPACE)
 string(REPLACE ".git" "" PACKAGE_URL PACKAGE_URL1)
 add_definitions(
@@ -66,6 +79,8 @@ add_definitions(
         -DPACKAGE_URL="${PACKAGE_URL}"
         -DPACKAGE_BUGREPORT="${PACKAGE_URL}/issues"
         -DPACKAGE_NAME="idevicerestore")
-if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "MSYS")
     add_definitions(-DHAVE_REALPATH=1)
 endif()
+install(TARGETS idevicerestore
+        DESTINATION ${CMAKE_INSTALL_PREFIX})
