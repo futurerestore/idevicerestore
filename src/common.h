@@ -149,6 +149,7 @@ struct idevicerestore_client_t {
 	cond_t device_event_cond;
 	int ignore_device_add_events;
 	plist_t macos_variant;
+	char* restore_variant;
 };
 
 extern struct idevicerestore_mode_t idevicerestore_modes[];
