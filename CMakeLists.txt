@@ -88,5 +88,8 @@ add_definitions(
 if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "MSYS")
     add_definitions(-DHAVE_REALPATH=1)
 endif()
-install(TARGETS idevicerestore
-        DESTINATION ${CMAKE_INSTALL_PREFIX})
+if(NOT DEFINED SUBPROJECT_BUILD)
+	install(TARGETS idevicerestore
+		DESTINATION "${CMAKE_INSTALL_PREFIX}/lib")
+endif()
+
