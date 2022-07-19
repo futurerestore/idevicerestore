@@ -2209,7 +2209,7 @@ static plist_t restore_get_se_firmware_data(restored_client_t restore, struct id
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity, true);
 		/* add SE,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
 		/* add required tags for SE TSS request */
@@ -2324,7 +2324,7 @@ static plist_t restore_get_savage_firmware_data(restored_client_t restore, struc
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity, true);
 		/* add Savage,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
 		/* add required tags for Savage TSS request */
@@ -2546,7 +2546,7 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity, true);
 
 		plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
 		if (client->image4supported) {
@@ -2726,7 +2726,7 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 			return NULL;
 		}
 
-		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity);
+		tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity, true);
 
 		/* add BMU,* tags from info dictionary to parameters */
 		plist_dict_merge(&parameters, p_info);
