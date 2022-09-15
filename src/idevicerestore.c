@@ -556,7 +556,7 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 				break;
 			}
 		} else {
-			info("NOTE: Running non-interactively, automatically selecting latest available version\n");
+            debug("NOTE: Running non-interactively, automatically selecting latest available version\n");
 			selected_fw = plist_array_get_item(signed_fws, 0);
 		}
 		if (!selected_fw) {

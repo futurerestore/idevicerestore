@@ -298,20 +298,20 @@ plist_t normal_get_lockdown_value(struct idevicerestore_client_t* client, const 
 
 	device_error = idevice_new(&device, client->udid);
 	if (device_error != IDEVICE_E_SUCCESS) {
-		error("ERROR: Unable to connect to device?!\n");
+        debug("ERROR: Unable to connect to device?!\n");
 		return NULL;
 	}
 
 	lockdown_error = lockdownd_client_new(device, &lockdown, "idevicerestore");
 	if (lockdown_error != LOCKDOWN_E_SUCCESS) {
-		error("ERROR: Unable to connect to lockdownd\n");
+        debug("ERROR: Unable to connect to lockdownd\n");
 		idevice_free(device);
 		return NULL;
 	}
 
 	lockdown_error = lockdownd_get_value(lockdown, domain, key, &node);
 	if (lockdown_error != LOCKDOWN_E_SUCCESS) {
-		debug("ERROR: Unable to get %s-%s from lockdownd\n", domain, key);
+        debug("ERROR: Unable to get %s-%s from lockdownd\n", domain, key);
 		lockdownd_client_free(lockdown);
 		idevice_free(device);
 		return NULL;

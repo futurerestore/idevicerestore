@@ -232,13 +232,17 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 		return -1;
 	}
 
-	if(build_identity_has_component(build_identity, "RestoreSEP") && ((client->device->chip_id == 0x8101 && client->build_major >= 19) || (client->device->chip_id < 0x8015 || client->device->chip_id > 0x8101))) {
-		/* send rsepfirmware and load it */
-		if (recovery_send_component_and_command(client, build_identity, "RestoreSEP", "rsepfirmware") < 0) {
-			error("ERROR: Unable to send RestoreSEP\n");
-			return -1;
-		}
-	}
+    if(!(client->flags & FLAG_NO_RSEP)) {
+        if (build_identity_has_component(build_identity, "RestoreSEP")) {
+            /* send rsepfirmware and load it */
+            if (recovery_send_component_and_command(client, build_identity, "RestoreSEP", "rsepfirmware") < 0) {
+                error("ERROR: Unable to send RestoreSEP\n");
+                return -1;
+            }
+        }
+    } else {
+        info("User specified not to send restore mode SEP.\n");
+    }
 
     /* send kernelcache and load it */
 

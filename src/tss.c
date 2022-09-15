@@ -1454,7 +1454,7 @@ plist_t tss_request_send(plist_t tss_request, const char* server_url_string) {
 		} else {
 			int url_index = (retry - 1) % 6;
 			curl_easy_setopt(handle, CURLOPT_URL, urls[url_index]);
-			info("Request URL set to %s\n", urls[url_index]);
+			debug("Request URL set to %s\n", urls[url_index]);
 		}
 
 		info("Sending TSS request attempt %d... ", retry);
