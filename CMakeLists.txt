@@ -85,7 +85,7 @@ add_definitions(
         -DPACKAGE_URL="${PACKAGE_URL}"
         -DPACKAGE_BUGREPORT="${PACKAGE_URL}/issues"
         -DPACKAGE_NAME="idevicerestore")
-if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "MSYS")
+if(NOT "${CMAKE_SYSTEM_NAME}" MATCHES "MSYS" AND NOT "${CMAKE_SYSTEM_NAME}" MATCHES "Windows")
     add_definitions(-DHAVE_REALPATH=1)
 endif()
 if(NOT DEFINED SUBPROJECT_BUILD)

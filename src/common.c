@@ -239,22 +239,31 @@ void debug_plist(plist_t plist) {
 	free(data);
 }
 
-void print_progress_bar(double progress) {
-#ifndef WIN32
-	if (info_disabled) return;
-	int i = 0;
-	if(progress < 0) return;
-	if(progress > 100) progress = 100;
-	info("\r[");
-	for(i = 0; i < 50; i++) {
-		if(i < progress / 2) info("=");
-		else info(" ");
-	}
-	info("] %5.1f%%", progress);
-	if(progress >= 100) info("\n");
-	fflush((info_stream) ? info_stream : stdout);
-#endif
+static void printline(int percent){
+    info("%03d [",percent);for (int i=0; i<100; i++) putchar((percent >0) ? ((--percent > 0) ? '=' : '>') : ' ');
+    info("]");
 }
+void print_progress_bar(double progress) {
+    if (info_disabled) return;
+#ifdef WIN32
+    info("\x1b[A\033[J"); //clear 2 lines
+    printline((int)progress);
+    info("\n");
+#else
+    int i = 0;
+    if(progress < 0) return;
+    if(progress > 100) progress = 100;
+    info("\r[");
+    for(i = 0; i < 50; i++) {
+        if(i < progress / 2) info("=");
+        else info(" ");
+    }
+    info("] %5.1f%%", progress);
+    if(progress >= 100) info("\n");
+#endif
+    fflush((info_stream) ? info_stream : stdout);
+}
+
 
 #define GET_RAND(min, max) ((rand() % (max - min)) + min)
 
