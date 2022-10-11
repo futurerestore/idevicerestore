@@ -404,7 +404,7 @@ int recovery_send_ibec(struct idevicerestore_client_t* client, plist_t build_ide
 		return -1;
 	}
 
-	recovery_error = irecv_send_command(client->recovery->client, "go");
+	recovery_error = irecv_send_command_breq(client->recovery->client, "go", 1);
 	if (recovery_error != IRECV_E_SUCCESS) {
 		error("ERROR: Unable to execute %s\n", component);
 		return -1;
@@ -557,10 +557,8 @@ int recovery_send_kernelcache(struct idevicerestore_client_t* client, plist_t bu
 		recovery_error = irecv_send_command(client->recovery->client, setba);
 	}
 
-    if ((client->flags & FLAG_NOBOOTX) == 0) recovery_error = irecv_send_command(client->recovery->client, "bootx");
-    else info("Flag nobootx detected! Not executing \"bootx\", but device is ready\n");
-    
-    if (recovery_error != IRECV_E_SUCCESS) {
+	recovery_error = irecv_send_command_breq(client->recovery->client, "bootx", 1);
+	if (recovery_error != IRECV_E_SUCCESS) {
 		error("ERROR: Unable to execute %s\n", component);
 		return -1;
 	}
@@ -636,6 +634,6 @@ int recovery_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char
 
 int recovery_send_reset(struct idevicerestore_client_t* client)
 {
-	irecv_send_command(client->recovery->client, "reset");
+	irecv_send_command_breq(client->recovery->client, "reset", 1);
 	return 0;
 }

@@ -64,7 +64,6 @@ char* ecid_to_string(uint64_t ecid)
 plist_t tss_request_new(plist_t overrides) {
 	plist_t request = plist_new_dict();
 
-	plist_dict_set_item(request, "@BBTicket", plist_new_bool(1));
 	plist_dict_set_item(request, "@HostPlatformInfo",
 #ifdef WIN32
 		plist_new_string("windows")
@@ -216,6 +215,7 @@ int tss_parameters_add_from_manifest(plist_t parameters, plist_t build_identity,
 
 	_plist_dict_copy_uint(parameters, build_identity, "eUICC,ChipID", NULL);
 
+	_plist_dict_copy_uint(parameters, build_identity, "NeRDEpoch", NULL);
 	_plist_dict_copy_data(parameters, build_identity, "PearlCertificationRootPub", NULL);
 
 	_plist_dict_copy_uint(parameters, build_identity, "Timer,BoardID,1", NULL);
@@ -243,6 +243,11 @@ int tss_parameters_add_from_manifest(plist_t parameters, plist_t build_identity,
 	_plist_dict_copy_item(parameters, build_identity, "Cryptex1,MobileAssetBrainOS", NULL);
 	_plist_dict_copy_item(parameters, build_identity, "Cryptex1,MobileAssetBrainVolume", NULL);
 	_plist_dict_copy_item(parameters, build_identity, "Cryptex1,MobileAssetBrainTrustCache", NULL);
+
+	node = plist_dict_get_item(build_identity, "Info");
+	if (node) {
+		_plist_dict_copy_bool(parameters, node, "RequiresUIDMode", NULL);
+	}
 
 	if (include_manifest) {
 		/* add build identity manifest dictionary */
@@ -289,7 +294,15 @@ int tss_request_add_ap_img4_tags(plist_t request, plist_t parameters)
 	}
 
 	_plist_dict_copy_data(request, parameters, "SepNonce", "ApSepNonce");
+	_plist_dict_copy_uint(request, parameters, "NeRDEpoch", NULL);
 	_plist_dict_copy_data(request, parameters, "PearlCertificationRootPub", NULL);
+
+	if (plist_dict_get_item(parameters, "UID_MODE")) {
+		_plist_dict_copy_item(request, parameters, "UID_MODE", NULL);
+	} else if (_plist_dict_get_bool(parameters, "RequiresUIDMode")) {
+		// The logic here is missing why this value is expected to be 'false'
+		plist_dict_set_item(request, "UID_MODE", plist_new_bool(0));
+	}
 
 	return 0;
 }
@@ -664,6 +677,12 @@ int tss_request_add_ap_tags(plist_t request, plist_t parameters, plist_t overrid
 				debug("DEBUG: %s: Skipping '%s' as it is neither firmware nor secondary nor FUD firmware payload\n", __func__, key);
 				continue;
 			}
+		}
+
+		/* skip components with IsFTAB:true */
+		if (_plist_dict_get_bool(info_dict, "IsFTAB")) {
+			debug("DEBUG: %s: Skipping FTAB component '%s'\n", __func__, key);
+			continue;
 		}
 
 		/* copy this entry */
@@ -1072,9 +1091,28 @@ int tss_request_add_vinyl_tags(plist_t request, plist_t parameters, plist_t over
 	plist_dict_set_item(request, "@BBTicket", plist_new_bool(1));
 	plist_dict_set_item(request, "@eUICC,Ticket", plist_new_bool(1));
 
+	_plist_dict_copy_bool(request, parameters, "eUICC,ApProductionMode", "ApProductionMode");
 	_plist_dict_copy_uint(request, parameters, "eUICC,ChipID", NULL);
 	_plist_dict_copy_data(request, parameters, "eUICC,EID", NULL);
 	_plist_dict_copy_data(request, parameters, "eUICC,RootKeyIdentifier", NULL);
+
+	if (!plist_dict_get_item(request, "eUICC,Gold")) {
+		plist_t n = plist_access_path(parameters, 2, "Manifest", "eUICC,Gold");
+		if (n) {
+			plist_t p = plist_new_dict();
+			_plist_dict_copy_data(p, n, "Digest", NULL);
+			plist_dict_set_item(request, "eUICC,Gold", p);
+		}
+	}
+
+	if (!plist_dict_get_item(request, "eUICC,Main")) {
+		plist_t n = plist_access_path(parameters, 2, "Manifest", "eUICC,Main");
+		if (n) {
+			plist_t p = plist_new_dict();
+			_plist_dict_copy_data(p, n, "Digest", NULL);
+			plist_dict_set_item(request, "eUICC,Main", p);
+		}
+	}
 
 	/* set Nonce for eUICC,Gold component */
 	node = plist_dict_get_item(parameters, "EUICCGoldNonce");
@@ -1370,6 +1408,44 @@ int tss_request_add_timer_tags(plist_t request, plist_t parameters, plist_t over
 		free(comp_name);
 	}
 	free(iter);
+
+	/* apply overrides */
+	if (overrides) {
+		plist_dict_merge(&request, overrides);
+	}
+
+	return 0;
+}
+
+int tss_request_add_cryptex_tags(plist_t request, plist_t parameters, plist_t overrides)
+{
+	tss_request_add_common_tags(request, parameters, NULL);
+
+	if (plist_dict_get_item(parameters, "Ap,LocalPolicy")) {
+		/* Cryptex1LocalPolicy */
+		tss_request_add_local_policy_tags(request, parameters);
+		_plist_dict_copy_data(request, parameters, "Ap,NextStageCryptex1IM4MHash", NULL);
+	} else {
+		/* Cryptex1 */
+		plist_dict_set_item(request, "@Cryptex1,Ticket", plist_new_bool(1));
+
+		_plist_dict_copy_bool(request, parameters, "ApSecurityMode", NULL);
+		_plist_dict_copy_bool(request, parameters, "ApProductionMode", NULL);
+
+		plist_dict_iter iter = NULL;
+		plist_dict_new_iter(parameters, &iter);
+		plist_t value = NULL;
+		while (1) {
+			char *key = NULL;
+			plist_dict_next_item(parameters, iter, &key, &value);
+			if (key == NULL)
+				break;
+			if (strncmp(key, "Cryptex1", 8) == 0) {
+				plist_dict_set_item(request, key, plist_copy(value));
+			}
+			free(key);
+		}
+	}
 
 	/* apply overrides */
 	if (overrides) {

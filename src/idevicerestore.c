@@ -2346,7 +2346,7 @@ int get_recoveryos_root_ticket_tss_response(struct idevicerestore_client_t* clie
 	tss_parameters_add_from_manifest(parameters, build_identity, true);
 
 	/* create basic request */
-	/* Adds @BBTicket, @HostPlatformInfo, @VersionInfo, @UUID */
+	/* Adds @HostPlatformInfo, @VersionInfo, @UUID */
 	request = tss_request_new(NULL);
 	if (request == NULL) {
 		error("ERROR: Unable to create TSS request\n");
@@ -2355,7 +2355,7 @@ int get_recoveryos_root_ticket_tss_response(struct idevicerestore_client_t* clie
 	}
 
 	/* add common tags from manifest */
-	/* Adds Ap,OSLongVersion, AppNonce, @ApImg4Ticket */
+	/* Adds Ap,OSLongVersion, ApNonce, @ApImg4Ticket */
 	if (tss_request_add_ap_img4_tags(request, parameters) < 0) {
 		error("ERROR: Unable to add AP IMG4 tags to TSS request\n");
 		plist_free(request);
@@ -2643,9 +2643,9 @@ int personalize_component(const char *component_name, const unsigned char* compo
 	unsigned char* stitched_component = NULL;
 	unsigned int stitched_component_size = 0;
 
-	if (tss_response && tss_response_get_ap_img4_ticket(tss_response, &component_blob, &component_blob_size) == 0) {
+	if (tss_response && plist_dict_get_item(tss_response, "ApImg4Ticket")) {
 		/* stitch ApImg4Ticket into IMG4 file */
-		img4_stitch_component(component_name, component_data, component_size, component_blob, component_blob_size, &stitched_component, &stitched_component_size);
+		img4_stitch_component(component_name, component_data, component_size, tss_response, &stitched_component, &stitched_component_size);
 	} else {
 		/* try to get blob for current component from tss response */
 		if (tss_response && tss_response_get_blob_by_entry(tss_response, component_name, &component_blob) < 0) {
