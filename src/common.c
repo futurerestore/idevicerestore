@@ -239,6 +239,20 @@ void debug_plist(plist_t plist) {
 	free(data);
 }
 
+void debug_plist2(plist_t plist) {
+    uint32_t size = 0;
+    char* data = NULL;
+    if(plist_to_xml(plist, &data, &size) != PLIST_ERR_SUCCESS) {
+        info("Failed to convert plist data to xml!\n");
+        return;
+    }
+    if (size <= MAX_PRINT_LEN)
+        info("%s:printing %i bytes plist:\n%s", __FILE__, size, data);
+    else
+        info("%s:supressed printing %i bytes plist...\n", __FILE__, size);
+    free(data);
+}
+
 static void printline(int percent){
     info("%03d [",percent);for (int i=0; i<100; i++) putchar((percent >0) ? ((--percent > 0) ? '=' : '>') : ' ');
     info("]");

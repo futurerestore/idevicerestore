@@ -170,6 +170,7 @@ void debug(const char* format, ...);
 #endif //debug
 
 void debug_plist(plist_t plist);
+void debug_plist2(plist_t plist);
 void print_progress_bar(double progress);
 int read_file(const char* filename, void** data, size_t* size);
 int write_file(const char* filename, const void* data, size_t size);
