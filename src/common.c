@@ -55,7 +55,7 @@
 #include "endianness.h"
 
 #ifdef DEBUG
-#define MAX_PRINT_LEN 64*1024*1024*1024
+#define MAX_PRINT_LEN 100000000
 #else
 #define MAX_PRINT_LEN 64*1024
 #endif
