@@ -1082,7 +1082,7 @@ int restore_send_component(restored_client_t restore, struct idevicerestore_clie
 	dict = plist_new_dict();
 	blob = plist_new_data((char*)data, size);
 	char compkeyname[256];
-	sprintf(compkeyname, "%sFile", component_name);
+	snprintf(compkeyname, 256, "%sFile", component_name);
 	plist_dict_set_item(dict, compkeyname, blob);
 	free(data);
 
@@ -2411,6 +2411,7 @@ static plist_t restore_get_yonkers_firmware_data(restored_client_t restore, stru
 	plist_t request = NULL;
 	plist_t response = NULL;
 	int ret;
+    int latestManifest = 0;
 
 	/* create Yonkers request */
 	request = tss_request_new(NULL);
@@ -2444,9 +2445,51 @@ static plist_t restore_get_yonkers_firmware_data(restored_client_t restore, stru
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
-		error("ERROR: Unable to fetch Yonkers ticket\n");
-		free(component_data);
-		return NULL;
+        info("Warning: Unable to fetch Yonkers ticket using current build_identity, trying again using latest build manifest\n");
+        latestManifest = 1;
+        /* create Yonkers request */
+        request = tss_request_new(NULL);
+        if (request == NULL) {
+            error("ERROR: Unable to create Yonkers TSS request\n");
+            free(component_data);
+            free(comp_name);
+            return NULL;
+        }
+
+        parameters = plist_new_dict();
+
+        /* add manifest for latest build manifest to parameters */
+        if(!client->sepBuildIdentity) {
+            error("ERROR: Unable to fetch Yonkers ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
+            free(component_data);
+            return NULL;
+        }
+
+        /* add manifest for current build_identity to parameters */
+        tss_parameters_add_from_manifest(parameters, build_identity, true);
+
+        /* add Yonkers,* tags from info dictionary to parameters */
+        plist_dict_merge(&parameters, p_info);
+        /* add required tags for Yonkers TSS request */
+        tss_request_add_yonkers_tags(request, parameters, NULL, &comp_name);
+
+        plist_free(parameters);
+
+        if (!comp_name) {
+            error("ERROR: Could not determine Yonkers firmware component\n");
+            plist_free(request);
+            return NULL;
+        }
+        debug("DEBUG: %s: using %s\n", __func__, comp_name);
+
+        info("Sending Yonkers TSS request...\n");
+        response = tss_request_send(request, client->tss_url);
+        plist_free(request);
+        if(response == NULL) {
+            error("ERROR: Unable to fetch Yonkers ticket a second time even using latest build manifest, this is not normal, RIPERONI :(\n");
+            free(component_data);
+            return NULL;
+        }
 	}
 
 	if (plist_dict_get_item(response, "Yonkers,Ticket")) {
@@ -2455,14 +2498,30 @@ static plist_t restore_get_yonkers_firmware_data(restored_client_t restore, stru
 		error("ERROR: No 'Yonkers,Ticket' in TSS response, this might not work\n");
 	}
 
-	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+    plist_t tmp_identity = NULL;
+    if(latestManifest == 1) {
+        tmp_identity = plist_copy(client->sepBuildIdentity);
+    } else {
+        tmp_identity = plist_copy(build_identity);
+    }
+	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		free(comp_name);
 		return NULL;
 	}
 
 	/* now get actual component data */
-	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+    extern int yonkers_num;
+    if(yonkers_num == -1) {
+        error("ERROR: Unable to detect yonkers type, defaulting to 0!\n");
+        yonkers_num = 0;
+    }
+    if (latestManifest != 1 || !client->yonkersfwdatasize[yonkers_num]) {
+        ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+    } else {
+        component_data = malloc(component_size = (unsigned int)client->yonkersfwdatasize[yonkers_num]);
+        ret = memcpy(component_data, client->yonkersfwdata[yonkers_num], component_size) == component_data ? 0 : -1;
+    }
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2583,16 +2642,18 @@ static plist_t restore_get_rose_firmware_data(restored_client_t restore, struct 
 
 	comp_name = "Rap,RTKitOS";
 	plist_t tmp_identity = NULL;
-	if(latestManifest == 1)
-		tmp_identity = plist_copy(client->sepBuildIdentity);
-	else
-		tmp_identity = plist_copy(build_identity);
-	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
+	if(latestManifest == 1) {
+        tmp_identity = plist_copy(client->sepBuildIdentity);
+    } else {
+        tmp_identity = plist_copy(build_identity);
+    }
+    if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		return NULL;
 	}
-	if (latestManifest != 1 || !client->rosefwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-	else{
+	if (latestManifest != 1 || !client->rosefwdatasize) {
+        ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+    } else {
 		component_data = malloc(component_size = (unsigned int)client->rosefwdatasize);
         ret = memcpy(component_data, client->rosefwdata, component_size) == component_data ? 0 : -1;
 	}
@@ -2753,18 +2814,20 @@ static plist_t restore_get_veridian_firmware_data(restored_client_t restore, str
 	}
 
 	plist_t tmp_identity = NULL;
-	if(latestManifest == 1)
-		tmp_identity = plist_copy(client->sepBuildIdentity);
-	else
-		tmp_identity = plist_copy(build_identity);
+	if(latestManifest == 1) {
+        tmp_identity = plist_copy(client->sepBuildIdentity);
+    } else {
+        tmp_identity = plist_copy(build_identity);
+    }
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		return NULL;
 	}
 
 	/* now get actual component data */
-	if (latestManifest != 1 || !client->veridianfwmfwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-	else{
+	if (latestManifest != 1 || !client->veridianfwmfwdatasize) {
+        ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+    } else{
 		component_data = malloc(component_size = (unsigned int)client->veridianfwmfwdatasize);
 		ret = memcpy(component_data, client->veridianfwmfwdata, component_size) == component_data ? 0 : -1;
 	}
@@ -2820,6 +2883,7 @@ static plist_t restore_get_tcon_firmware_data(restored_client_t restore, struct 
 	plist_t request = NULL;
 	plist_t response = NULL;
 	int ret;
+    int latestManifest = 0;
 
 	/* create Baobab request */
 	request = tss_request_new(NULL);
@@ -2846,9 +2910,44 @@ static plist_t restore_get_tcon_firmware_data(restored_client_t restore, struct 
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
-		error("ERROR: Unable to fetch Baobab ticket\n");
-		free(component_data);
-		return NULL;
+        info("Warning: Unable to fetch Baobab ticket using current build_identity, trying again using latest build manifest\n");
+        latestManifest = 1;
+
+        /* create Baobab request */
+        request = tss_request_new(NULL);
+        if (request == NULL) {
+            error("ERROR: Unable to create Baobab TSS request\n");
+            free(component_data);
+            return NULL;
+        }
+
+        parameters = plist_new_dict();
+
+        /* add manifest for current build_identity to parameters */
+        if(!client->sepBuildIdentity) {
+            error("ERROR: Unable to fetch Baobab ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
+            free(component_data);
+            return NULL;
+        }
+
+        tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity, true);
+
+        /* add Baobab,* tags from info dictionary to parameters */
+        plist_dict_merge(&parameters, p_info);
+
+        /* add required tags for Baobab TSS request */
+        tss_request_add_tcon_tags(request, parameters, NULL);
+
+        plist_free(parameters);
+
+        info("Sending Baobab TSS request...\n");
+        response = tss_request_send(request, client->tss_url);
+        plist_free(request);
+        if (response == NULL) {
+            error("ERROR: Unable to fetch Baobab ticket a second time even using latest build manifest, this is not normal, RIPERONI :(\n");
+            free(component_data);
+            return NULL;
+        }
 	}
 
 	if (plist_dict_get_item(response, "Baobab,Ticket")) {
@@ -2857,13 +2956,24 @@ static plist_t restore_get_tcon_firmware_data(restored_client_t restore, struct 
 		error("ERROR: No 'Baobab,Ticket' in TSS response, this might not work\n");
 	}
 
-	if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+    plist_t tmp_identity = NULL;
+    if(latestManifest == 1) {
+        tmp_identity = plist_copy(client->sepBuildIdentity);
+    } else {
+        tmp_identity = plist_copy(build_identity);
+    }
+	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		return NULL;
 	}
 
 	/* now get actual component data */
-	ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+    if (latestManifest != 1 || !client->baobabfwdatasize) {
+        ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+    } else {
+        component_data = malloc(component_size = (unsigned int)client->baobabfwdatasize);
+        ret = memcpy(component_data, client->baobabfwdata, component_size) == component_data ? 0 : -1;
+    }
 	free(comp_path);
 	comp_path = NULL;
 	if (ret < 0) {
@@ -2894,6 +3004,7 @@ static plist_t restore_get_timer_firmware_data(restored_client_t restore, struct
 	const char* ticket_name = NULL;
 	uint32_t tag = 0;
 	int ret;
+    int latestManifest = 0;
 
 	/* create Timer request */
 	request = tss_request_new(NULL);
@@ -2934,25 +3045,25 @@ static plist_t restore_get_timer_firmware_data(restored_client_t restore, struct
 			plist_dict_set_item(parameters, "TicketName", plist_copy(node));
 		}
 
-		sprintf(key, "Timer,ChipID,%u", tag);
+		snprintf(key, 64, "Timer,ChipID,%u", tag);
 		_plist_dict_copy_uint(parameters, hwid, key, "ChipID");
 
-		sprintf(key, "Timer,BoardID,%u", tag);
+        snprintf(key, 64, "Timer,BoardID,%u", tag);
 		_plist_dict_copy_uint(parameters, hwid, key, "BoardID");
 
-		sprintf(key, "Timer,ECID,%u", tag);
+        snprintf(key, 64, "Timer,ECID,%u", tag);
 		_plist_dict_copy_uint(parameters, hwid, key, "ECID");
 
-		sprintf(key, "Timer,Nonce,%u", tag);
+        snprintf(key, 64, "Timer,Nonce,%u", tag);
 		_plist_dict_copy_data(parameters, hwid, key, "Nonce");
 
-		sprintf(key, "Timer,SecurityMode,%u", tag);
+        snprintf(key, 64, "Timer,SecurityMode,%u", tag);
 		_plist_dict_copy_bool(parameters, hwid, key, "SecurityMode");
 
-		sprintf(key, "Timer,SecurityDomain,%u", tag);
+        snprintf(key, 64, "Timer,SecurityDomain,%u", tag);
 		_plist_dict_copy_uint(parameters, hwid, key, "SecurityDomain");
 
-		sprintf(key, "Timer,ProductionMode,%u", tag);
+        snprintf(key, 64, "Timer,ProductionMode,%u", tag);
 		_plist_dict_copy_uint(parameters, hwid, key, "ProductionStatus");
 	}
 	plist_t ap_info = plist_dict_get_item(p_info, "APInfo");
@@ -2973,8 +3084,95 @@ static plist_t restore_get_timer_firmware_data(restored_client_t restore, struct
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
-		error("ERROR: Unable to fetch %s\n", ticket_name);
-		return NULL;
+        info("Warning: Unable to fetch Timer ticket using current build_identity, trying again using latest build manifest\n");
+        latestManifest = 1;
+        /* create Timer request */
+        request = tss_request_new(NULL);
+        if (request == NULL) {
+            error("ERROR: Unable to create Timer TSS request\n");
+            return NULL;
+        }
+
+        parameters = plist_new_dict();
+
+        /* add manifest for current build_identity to parameters */
+        if(!client->sepBuildIdentity) {
+            error("ERROR: Unable to fetch Timer ticket because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n");
+            free(component_data);
+            return NULL;
+        }
+
+        tss_parameters_add_from_manifest(parameters, client->sepBuildIdentity, true);
+
+        plist_dict_set_item(parameters, "ApProductionMode", plist_new_bool(1));
+        if (client->image4supported) {
+            plist_dict_set_item(parameters, "ApSecurityMode", plist_new_bool(1));
+            plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(1));
+        } else {
+            plist_dict_set_item(parameters, "ApSupportsImg4", plist_new_bool(0));
+        }
+
+        /* add Timer,* tags from info dictionary to parameters */
+        info_array = plist_dict_get_item(p_info, "InfoArray");
+        if (!info_array) {
+            error("ERROR: Could not find InfoArray in info dictionary\n");
+            plist_free(parameters);
+            return NULL;
+        } else {
+            plist_t info_dict = plist_array_get_item(info_array, 0);
+            plist_t hwid = plist_dict_get_item(info_dict, "HardwareID");
+            tag = (uint32_t)_plist_dict_get_uint(info_dict, "TagNumber");
+            char key[64];
+
+            plist_dict_set_item(parameters, "TagNumber", plist_new_uint(tag));
+            plist_t node = plist_dict_get_item(info_dict, "TicketName");
+            if (node) {
+                ticket_name = plist_get_string_ptr(node, NULL);
+                plist_dict_set_item(parameters, "TicketName", plist_copy(node));
+            }
+
+            snprintf(key, 64, "Timer,ChipID,%u", tag);
+            _plist_dict_copy_uint(parameters, hwid, key, "ChipID");
+
+            snprintf(key, 64, "Timer,BoardID,%u", tag);
+            _plist_dict_copy_uint(parameters, hwid, key, "BoardID");
+
+            snprintf(key, 64, "Timer,ECID,%u", tag);
+            _plist_dict_copy_uint(parameters, hwid, key, "ECID");
+
+            snprintf(key, 64, "Timer,Nonce,%u", tag);
+            _plist_dict_copy_data(parameters, hwid, key, "Nonce");
+
+            snprintf(key, 64, "Timer,SecurityMode,%u", tag);
+            _plist_dict_copy_bool(parameters, hwid, key, "SecurityMode");
+
+            snprintf(key, 64, "Timer,SecurityDomain,%u", tag);
+            _plist_dict_copy_uint(parameters, hwid, key, "SecurityDomain");
+
+            snprintf(key, 64, "Timer,ProductionMode,%u", tag);
+            _plist_dict_copy_uint(parameters, hwid, key, "ProductionStatus");
+        }
+        ap_info = plist_dict_get_item(p_info, "APInfo");
+        if (!ap_info) {
+            error("ERROR: Could not find APInfo in info dictionary\n");
+            plist_free(parameters);
+            return NULL;
+        } else {
+            plist_dict_merge(&parameters, ap_info);
+        }
+
+        /* add required tags for Timer TSS request */
+        tss_request_add_timer_tags(request, parameters, NULL);
+
+        plist_free(parameters);
+
+        info("Sending %s TSS request...\n", ticket_name);
+        response = tss_request_send(request, client->tss_url);
+        plist_free(request);
+        if (response == NULL) {
+            error("ERROR: Unable to fetch Timer ticket a second time even using latest build manifest, this is not normal, RIPERONI :(\n");
+            return NULL;
+        }
 	}
 
 	if (plist_dict_get_item(response, ticket_name)) {
@@ -2983,13 +3181,24 @@ static plist_t restore_get_timer_firmware_data(restored_client_t restore, struct
 		error("ERROR: No '%s' in TSS response, this might not work\n", ticket_name);
 	}
 
-	sprintf(comp_name, "Timer,RTKitOS,%u", tag);
-	if (build_identity_has_component(build_identity, comp_name)) {
-		if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+	snprintf(comp_name, 64, "Timer,RTKitOS,%u", tag);
+    plist_t tmp_identity = NULL;
+    if(latestManifest == 1) {
+        tmp_identity = plist_copy(client->sepBuildIdentity);
+    } else {
+        tmp_identity = plist_copy(build_identity);
+    }
+	if (build_identity_has_component(tmp_identity, comp_name)) {
+		if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 			error("ERROR: Unable to get path for '%s' component\n", comp_name);
 			return NULL;
 		}
-		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+        if (latestManifest != 1 || !client->timerfwdatasize) {
+            ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+        } else {
+            component_data = malloc(component_size = (unsigned int)client->timerfwdatasize);
+            ret = memcpy(component_data, client->timerfwdata, component_size) == component_data ? 0 : -1;
+        }
 		free(comp_path);
 		comp_path = NULL;
 		if (ret < 0) {
@@ -3011,14 +3220,19 @@ static plist_t restore_get_timer_firmware_data(restored_client_t restore, struct
 		info("NOTE: Build identity does not have a '%s' component.\n", comp_name);
 	}
 
-	sprintf(comp_name, "Timer,RestoreRTKitOS,%u", tag);
-	if (build_identity_has_component(build_identity, comp_name)) {
-		if (build_identity_get_component_path(build_identity, comp_name, &comp_path) < 0) {
+	snprintf(comp_name, 64, "Timer,RestoreRTKitOS,%u", tag);
+	if (build_identity_has_component(tmp_identity, comp_name)) {
+		if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 			ftab_free(ftab);
 			error("ERROR: Unable to get path for '%s' component\n", comp_name);
 			return NULL;
 		}
-		ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+        if (latestManifest != 1 || !client->rtimerfwdatasize) {
+            ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+        } else {
+            component_data = malloc(component_size = (unsigned int)client->rtimerfwdatasize);
+            ret = memcpy(component_data, client->rtimerfwdata, component_size) == component_data ? 0 : -1;
+        }
 		free(comp_path);
 		comp_path = NULL;
 		if (ret < 0) {
@@ -3130,6 +3344,7 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
 		return NULL;
 	}
 	plist_dict_merge(&parameters, device_generated_request);
+//    tss_parameters_add_from_manifest(parameters, build_identity, true);
 
 	/* add Cryptex1 tags to request */
 	tss_request_add_cryptex_tags(request, parameters, NULL);
@@ -3137,6 +3352,9 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
 	plist_free(parameters);
 
 	info("Sending %s TSS request...\n", s_updater_name);
+    if(idevicerestore_debug && request) {
+        debug_plist(request);
+    }
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
@@ -3148,7 +3366,8 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
 		info("Received %s\n", response_ticket);
 	} else {
 		error("ERROR: No '%s' in TSS response, this might not work\n", response_ticket);
-		debug_plist(response);
+        if(idevicerestore_debug && response)
+		    debug_plist(response);
 	}
 
 	return response;
@@ -3280,8 +3499,16 @@ static int restore_send_firmware_updater_data(restored_client_t restore, struct 
 	} else if ((strcmp(s_updater_name, "Cryptex1") == 0) || (strcmp(s_updater_name, "Cryptex1LocalPolicy") == 0)) {
 		fwdict = restore_get_cryptex1_firmware_data(restore, client, build_identity, p_info, arguments);
 		if (fwdict == NULL) {
-			error("ERROR: %s: Couldn't get %s firmware data\n", __func__, s_updater_name);
-			goto error_out;
+            info("Warning: %s: Couldn't get %s firmware data using current build_identity, trying again using latest build manifest\n", __func__, s_updater_name);
+            if(!client->sepBuildIdentity) {
+                error("ERROR: %s: Couldn't get %s firmware data because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n", __func__, s_updater_name);
+                goto error_out;
+            }
+            fwdict = restore_get_cryptex1_firmware_data(restore, client, client->sepBuildIdentity, p_info, arguments);
+            if (fwdict == NULL) {
+                error("ERROR: %s: Couldn't get %s firmware data a second time even using latest build manifest, this is not normal, RIPERONI :(\n", __func__, s_updater_name);
+                goto error_out;
+            }
 		}
 	} else {
 		error("ERROR: %s: Got unknown updater name '%s'.\n", __func__, s_updater_name);
@@ -3506,7 +3733,9 @@ plist_t restore_get_build_identity(struct idevicerestore_client_t* client, uint8
 			variant, 0);
 
 	plist_t unique_id_node = plist_dict_get_item(client->build_manifest, "UniqueBuildID");
-	debug_plist(unique_id_node);
+    if(idevicerestore_debug && unique_id_node) {
+        debug_plist(unique_id_node);
+    }
 
 	return build_identity;
 }
@@ -3564,8 +3793,9 @@ static char* extract_global_manifest_path(plist_t build_identity, char *variant)
 	}
 
 	// The path of the global manifest is hardcoded. There's no pointer to in the build manifest.
-	char *ticket_path = malloc((42+strlen(macos_variant)+strlen(device_class)+1)*sizeof(char));
-	sprintf(ticket_path, "Firmware/Manifests/restore/%s/apticket.%s.im4m", macos_variant, device_class);
+    size_t ticket_path_sz = (42+strlen(macos_variant)+strlen(device_class)+1)*sizeof(char);
+	char *ticket_path = malloc(ticket_path_sz);
+	snprintf(ticket_path, ticket_path_sz, "Firmware/Manifests/restore/%s/apticket.%s.im4m", macos_variant, device_class);
 
 	free(device_class);
 	free(macos_variant);
@@ -3719,6 +3949,8 @@ int restore_send_source_boot_object_v4(restored_client_t restore, struct idevice
 	debug_plist(msg);
 
 	char *image_name = NULL;
+    unsigned char* component_data = NULL;
+    unsigned int component_size = 0;
 	plist_t node = plist_access_path(msg, 2, "Arguments", "ImageName");
 	if (!node || plist_get_node_type(node) != PLIST_STRING) {
 		debug("Failed to parse arguments from SourceBootObjectV4 plist\n");
@@ -3783,11 +4015,139 @@ int restore_send_source_boot_object_v4(restored_client_t restore, struct idevice
 
 	info("Sending %s now...\n", component);
 
-	if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb)_restore_send_file_data, restore) < 0) {
-		free(path);
-		error("ERROR: Failed to send component %s\n", component);
-		return -1;
-	}
+    if(!strcmp(component, "Cryptex1,SystemOS")) {
+        if (!client->cryptex1sysosdatasize) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+                free(path);
+                error("ERROR: Failed to send component %s\n", component);
+                return -1;
+            }
+        } else {
+            int64_t i = client->cryptex1sysosdatasize;
+            while (i > 0) {
+                int blob_size = i > 8192 ? 8192 : i;
+                if (_restore_send_file_data(restore, (client->cryptex1sysosdata + client->cryptex1sysosdatasize - i), blob_size) < 0) {
+                    free(client->cryptex1sysosdata);
+                    error("ERROR: Unable to send component %s data\n", component);
+                    return -1;
+                }
+                i -= blob_size;
+            }
+            free(client->cryptex1sysosdata);
+            _restore_send_file_data(restore, NULL, 0);
+        }
+    } else if(!strcmp(component, "Cryptex1,SystemVolume")) {
+        if (!client->cryptex1sysvoldatasize) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+                free(path);
+                error("ERROR: Failed to send component %s\n", component);
+                return -1;
+            }
+        } else {
+            int64_t i = client->cryptex1sysvoldatasize;
+            while (i > 0) {
+                int blob_size = i > 8192 ? 8192 : i;
+                if (_restore_send_file_data(restore, (client->cryptex1sysvoldata + client->cryptex1sysvoldatasize - i), blob_size) < 0) {
+                    free(client->cryptex1sysvoldata);
+                    error("ERROR: Unable to send component %s data\n", component);
+                    return -1;
+                }
+                i -= blob_size;
+            }
+            free(client->cryptex1sysvoldata);
+            _restore_send_file_data(restore, NULL, 0);
+        }
+    } else if(!strcmp(component, "Cryptex1,SystemTrustCache")) {
+        if (!client->cryptex1systcdatasize) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+                free(path);
+                error("ERROR: Failed to send component %s\n", component);
+                return -1;
+            }
+        } else {
+            int64_t i = client->cryptex1systcdatasize;
+            while (i > 0) {
+                int blob_size = i > 8192 ? 8192 : i;
+                if (_restore_send_file_data(restore, (client->cryptex1systcdata + client->cryptex1systcdatasize - i), blob_size) < 0) {
+                    free(client->cryptex1systcdata);
+                    error("ERROR: Unable to send component %s data\n", component);
+                    return -1;
+                }
+                i -= blob_size;
+            }
+            free(client->cryptex1systcdata);
+            _restore_send_file_data(restore, NULL, 0);
+        }
+    } else if(!strcmp(component, "Cryptex1,AppOS")) {
+        if (!client->cryptex1apposdatasize) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+                free(path);
+                error("ERROR: Failed to send component %s\n", component);
+                return -1;
+            }
+        } else {
+            int64_t i = client->cryptex1apposdatasize;
+            while (i > 0) {
+                int blob_size = i > 8192 ? 8192 : i;
+                if (_restore_send_file_data(restore, (client->cryptex1apposdata + client->cryptex1apposdatasize - i), blob_size) < 0) {
+                    free(client->cryptex1apposdata);
+                    error("ERROR: Unable to send component %s data\n", component);
+                    return -1;
+                }
+                i -= blob_size;
+            }
+            free(client->cryptex1apposdata);
+            _restore_send_file_data(restore, NULL, 0);
+        }
+    } else if(!strcmp(component, "Cryptex1,AppVolume")) {
+        if (!client->cryptex1appvoldatasize) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+                free(path);
+                error("ERROR: Failed to send component %s\n", component);
+                return -1;
+            }
+        } else {
+            int64_t i = client->cryptex1appvoldatasize;
+            while (i > 0) {
+                int blob_size = i > 8192 ? 8192 : i;
+                if (_restore_send_file_data(restore, (client->cryptex1appvoldata + client->cryptex1appvoldatasize - i), blob_size) < 0) {
+                    free(client->cryptex1appvoldata);
+                    error("ERROR: Unable to send component %s data\n", component);
+                    return -1;
+                }
+                i -= blob_size;
+            }
+            free(client->cryptex1appvoldata);
+            _restore_send_file_data(restore, NULL, 0);
+        }
+    } else if(!strcmp(component, "Cryptex1,AppTrustCache")) {
+        if (!client->cryptex1apptcdatasize) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+                free(path);
+                error("ERROR: Failed to send component %s\n", component);
+                return -1;
+            }
+        } else {
+            int64_t i = client->cryptex1apptcdatasize;
+            while (i > 0) {
+                int blob_size = i > 8192 ? 8192 : i;
+                if (_restore_send_file_data(restore, (client->cryptex1apptcdata + client->cryptex1apptcdatasize - i), blob_size) < 0) {
+                    free(client->cryptex1apptcdata);
+                    error("ERROR: Unable to send component %s data\n", component);
+                    return -1;
+                }
+                i -= blob_size;
+            }
+            free(client->cryptex1apptcdata);
+            _restore_send_file_data(restore, NULL, 0);
+        }
+    } else {
+        if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+            free(path);
+            error("ERROR: Failed to send component %s\n", component);
+            return -1;
+        }
+    }
 	free(path);
 
 	info("Done sending %s\n", component);
@@ -3850,7 +4210,34 @@ int restore_send_buildidentity(restored_client_t restore, struct idevicerestore_
 	plist_t build_identity = restore_get_build_identity_from_request(client, msg);
 
 	dict = plist_new_dict();
-	plist_dict_set_item(dict, "BuildIdentityDict", plist_copy(build_identity));
+
+//    plist_t sep_manifest = plist_copy(plist_dict_get_item(client->sepBuildIdentity, "Manifest"));
+//    plist_t build_identity_manifest = plist_dict_get_item(build_identity, "Manifest");
+//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,Version", NULL);
+//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,PreauthorizationVersion", NULL);
+//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,FakeRoot", NULL);
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemOS");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemVolume");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemTrustCache");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppOS");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppVolume");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppTrustCache");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainOS");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainVolume");
+//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainTrustCache");
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemOS", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemVolume", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemTrustCache", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppOS", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppVolume", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppTrustCache", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainOS", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainVolume", NULL);
+//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainTrustCache", NULL);
+//    debug("build_identity:\n");
+//    debug_plist(build_identity);
+
+    plist_dict_set_item(dict, "BuildIdentityDict", plist_copy(build_identity));
 
 	plist_t node = plist_access_path(msg, 2, "Arguments", "Variant");
 	if(node) {
@@ -4483,7 +4870,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		node = plist_dict_get_item(message, "MsgType");
 		if (!node || plist_get_node_type(node) != PLIST_STRING) {
 			debug("Unknown message received:\n");
-			//if (idevicerestore_debug)
+			if (idevicerestore_debug)
 				debug_plist(message);
 			plist_free(message);
 			message = NULL;
@@ -4559,7 +4946,7 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 		// at least the "previous error logs" messages usually end up here
 		else {
 			debug("Unknown message type received\n");
-			//if (idevicerestore_debug)
+			if (idevicerestore_debug)
 				debug_plist(message);
 		}
 

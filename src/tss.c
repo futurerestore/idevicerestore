@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <unistd.h>
 #include <curl/curl.h>
 #include <plist/plist.h>
@@ -977,6 +978,8 @@ int tss_request_add_savage_tags(plist_t request, plist_t parameters, plist_t ove
 	return 0;
 }
 
+int yonkers_num;
+
 int tss_request_add_yonkers_tags(plist_t request, plist_t parameters, plist_t overrides, char **component_name)
 {
 	plist_t node = NULL;
@@ -1057,6 +1060,28 @@ int tss_request_add_yonkers_tags(plist_t request, plist_t parameters, plist_t ov
 	}
 
 	/* add Yonkers,SysTopPatch* */
+    char **yonkers_name = NULL;
+    plist_dict_get_item_key(comp_node, yonkers_name);
+    if(yonkers_name) {
+        yonkers_num = (int)strtol(*yonkers_name + strlen(*yonkers_name) - 1 , NULL, 10);
+        if(errno != 0) {
+            if((int64_t)(*yonkers_name + strlen(*yonkers_name) - 1) == (int64_t)'A') {
+                yonkers_num = 10;
+            } else if((int64_t)(*yonkers_name + strlen(*yonkers_name) - 1) == (int64_t)'B') {
+                yonkers_num = 11;
+            } else if((int64_t)(*yonkers_name + strlen(*yonkers_name) - 1) == (int64_t)'C') {
+                yonkers_num = 12;
+            } else if((int64_t)(*yonkers_name + strlen(*yonkers_name) - 1) == (int64_t)'D') {
+                yonkers_num = 13;
+            } else if((int64_t)(*yonkers_name + strlen(*yonkers_name) - 1) == (int64_t)'E') {
+                yonkers_num = 14;
+            } else if((int64_t)(*yonkers_name + strlen(*yonkers_name) - 1) == (int64_t)'F') {
+                yonkers_num = 15;
+            } else {
+                yonkers_num = -1;
+            }
+        }
+    }
 	if (comp_node != NULL) {
 		plist_t comp_dict = plist_copy(comp_node);
 		plist_dict_remove_item(comp_dict, "Info");
@@ -1346,31 +1371,31 @@ int tss_request_add_timer_tags(plist_t request, plist_t parameters, plist_t over
 		return -1;
 	}
 	char key[64];
-	sprintf(key, "@%s", plist_get_string_ptr(node, NULL));
+	snprintf(key, 64, "@%s", plist_get_string_ptr(node, NULL));
 
 	plist_dict_set_item(request, key, plist_new_bool(1));
 
 	tag = (uint32_t)_plist_dict_get_uint(parameters, "TagNumber");
 
-	sprintf(key, "Timer,BoardID,%u", tag);
+    snprintf(key, 64, "Timer,BoardID,%u", tag);
 	_plist_dict_copy_uint(request, parameters, key, NULL);
 
-	sprintf(key, "Timer,ChipID,%u", tag);
+	snprintf(key, 64, "Timer,ChipID,%u", tag);
 	_plist_dict_copy_uint(request, parameters, key, NULL);
 
-	sprintf(key, "Timer,SecurityDomain,%u", tag);
+	snprintf(key, 64, "Timer,SecurityDomain,%u", tag);
 	_plist_dict_copy_uint(request, parameters, key, NULL);
 
-	sprintf(key, "Timer,SecurityMode,%u", tag);
+	snprintf(key, 64, "Timer,SecurityMode,%u", tag);
 	_plist_dict_copy_bool(request, parameters, key, NULL);
 
-	sprintf(key, "Timer,ProductionMode,%u", tag);
+	snprintf(key, 64, "Timer,ProductionMode,%u", tag);
 	_plist_dict_copy_bool(request, parameters, key, NULL);
 
-	sprintf(key, "Timer,ECID,%u", tag);
+	snprintf(key, 64, "Timer,ECID,%u", tag);
 	_plist_dict_copy_uint(request, parameters, key, NULL);
 
-	sprintf(key, "Timer,Nonce,%u", tag);
+	snprintf(key, 64, "Timer,Nonce,%u", tag);
 	_plist_dict_copy_data(request, parameters, key, NULL);
 
 	char *comp_name = NULL;
@@ -1419,41 +1444,144 @@ int tss_request_add_timer_tags(plist_t request, plist_t parameters, plist_t over
 
 int tss_request_add_cryptex_tags(plist_t request, plist_t parameters, plist_t overrides)
 {
-	tss_request_add_common_tags(request, parameters, NULL);
+    tss_request_add_common_tags(request, parameters, NULL);
 
-	if (plist_dict_get_item(parameters, "Ap,LocalPolicy")) {
-		/* Cryptex1LocalPolicy */
-		tss_request_add_local_policy_tags(request, parameters);
-		_plist_dict_copy_data(request, parameters, "Ap,NextStageCryptex1IM4MHash", NULL);
-	} else {
-		/* Cryptex1 */
-		plist_dict_set_item(request, "@Cryptex1,Ticket", plist_new_bool(1));
 
-		_plist_dict_copy_bool(request, parameters, "ApSecurityMode", NULL);
-		_plist_dict_copy_bool(request, parameters, "ApProductionMode", NULL);
+    if (plist_dict_get_item(parameters, "Ap,LocalPolicy")) {
+        /* Cryptex1LocalPolicy */
+        tss_request_add_local_policy_tags(request, parameters);
+        _plist_dict_copy_data(request, parameters, "Ap,NextStageCryptex1IM4MHash", NULL);
+    } else {
+        /* Cryptex1 */
+        plist_dict_set_item(request, "@Cryptex1,Ticket", plist_new_bool(1));
 
-		plist_dict_iter iter = NULL;
-		plist_dict_new_iter(parameters, &iter);
-		plist_t value = NULL;
-		while (1) {
-			char *key = NULL;
-			plist_dict_next_item(parameters, iter, &key, &value);
-			if (key == NULL)
-				break;
-			if (strncmp(key, "Cryptex1", 8) == 0) {
-				plist_dict_set_item(request, key, plist_copy(value));
-			}
-			free(key);
-		}
-	}
+        _plist_dict_copy_bool(request, parameters, "ApSecurityMode", NULL);
+        _plist_dict_copy_bool(request, parameters, "ApProductionMode", NULL);
 
-	/* apply overrides */
-	if (overrides) {
-		plist_dict_merge(&request, overrides);
-	}
+        plist_dict_iter iter = NULL;
+        plist_dict_new_iter(parameters, &iter);
+        plist_t value = NULL;
+        while (1) {
+            char *key = NULL;
+            plist_dict_next_item(parameters, iter, &key, &value);
+            if (key == NULL)
+                break;
+            if (strncmp(key, "Cryptex1", 8) == 0) {
+                plist_dict_set_item(request, key, plist_copy(value));
+            }
+            free(key);
+        }
+    }
 
-	return 0;
+//    plist_t node = NULL;
+//
+//    plist_t manifest_node = plist_dict_get_item(parameters, "Manifest");
+//    if (!manifest_node || plist_get_node_type(manifest_node) != PLIST_DICT) {
+//        error("ERROR: %s: Unable to get restore manifest from parameters\n", __func__);
+//        return -1;
+//    }
+//
+//    char *comp_name = NULL;
+//    plist_dict_iter iter = NULL;
+//    plist_dict_new_iter(manifest_node, &iter);
+//    while (iter) {
+//        node = NULL;
+//        comp_name = NULL;
+//        plist_dict_next_item(manifest_node, iter, &comp_name, &node);
+//        if (comp_name == NULL) {
+//            node = NULL;
+//            break;
+//        }
+//        if (strncmp(comp_name, "Cryptex1,", 9) == 0) {
+//            plist_t manifest_entry = plist_copy(node);
+//
+//            /* handle RestoreRequestRules */
+//            plist_t rules = plist_access_path(manifest_entry, 2, "Info", "RestoreRequestRules");
+//            if (rules) {
+//                debug("DEBUG: Applying restore request rules for entry %s\n", comp_name);
+//                tss_entry_apply_restore_request_rules(manifest_entry, parameters, rules);
+//            }
+//
+//            /* Make sure we have a Digest key for Trusted items even if empty */
+//            if (_plist_dict_get_bool(manifest_entry, "Trusted") && !plist_dict_get_item(manifest_entry, "Digest")) {
+//                debug("DEBUG: No Digest data, using empty value for entry %s\n", comp_name);
+//                plist_dict_set_item(manifest_entry, "Digest", plist_new_data(NULL, 0));
+//            }
+//
+//            plist_dict_remove_item(manifest_entry, "Info");
+//
+//            /* finally add entry to request */
+//            plist_dict_set_item(request, comp_name, manifest_entry);
+//        }
+//        free(comp_name);
+//    }
+//    free(iter);
+
+    /* apply overrides */
+    if (overrides) {
+        plist_dict_merge(&request, overrides);
+    }
+
+    return 0;
 }
+
+//int tss_request_add_cryptex_tags(plist_t request, plist_t parameters, plist_t overrides)
+//{
+//	tss_request_add_common_tags(request, parameters, NULL);
+//
+//	if (plist_dict_get_item(parameters, "Ap,LocalPolicy")) {
+//		/* Cryptex1LocalPolicy */
+//		tss_request_add_local_policy_tags(request, parameters);
+//		_plist_dict_copy_data(request, parameters, "Ap,NextStageCryptex1IM4MHash", NULL);
+//	} else {
+//		/* Cryptex1 */
+//		plist_dict_set_item(request, "@Cryptex1,Ticket", plist_new_bool(1));
+//
+//		_plist_dict_copy_bool(request, parameters, "ApSecurityMode", NULL);
+//		_plist_dict_copy_bool(request, parameters, "ApProductionMode", NULL);
+//
+//		plist_dict_iter iter = NULL;
+//		plist_dict_new_iter(parameters, &iter);
+//		plist_t value = NULL;
+//		while (1) {
+//			char *key = NULL;
+//			plist_dict_next_item(parameters, iter, &key, &value);
+//			if (key == NULL)
+//				break;
+//			if (strncmp(key, "Cryptex1", 8) == 0) {
+//				plist_dict_set_item(request, key, plist_copy(value));
+//
+//                /* copy this entry */
+//                plist_t manifest_entry = plist_dict_get_item(plist_copy(value), "Manifest");
+//
+//                /* remove obsolete Info node */
+//                plist_dict_remove_item(manifest_entry, "Info");
+//
+//                /* handle RestoreRequestRules */
+//                plist_t rules = plist_access_path(manifest_entry, 2, "Info", "RestoreRequestRules");
+//                if (rules) {
+//                    debug("DEBUG: Applying restore request rules for entry %s\n", key);
+//                    tss_entry_apply_restore_request_rules(manifest_entry, parameters, rules);
+//                }
+//                /* Make sure we have a Digest key for Trusted items even if empty */
+//                if (_plist_dict_get_bool(manifest_entry, "Trusted") && !plist_dict_get_item(manifest_entry, "Digest")) {
+//                    debug("DEBUG: No Digest data, using empty value for entry %s\n", key);
+//                    plist_dict_set_item(manifest_entry, "Digest", plist_new_data(NULL, 0));
+//                }
+//
+//                plist_dict_set_item(request, key, manifest_entry);
+//			}
+//            free(key);
+//		}
+//	}
+//
+//	/* apply overrides */
+//	if (overrides) {
+//		plist_dict_merge(&request, overrides);
+//	}
+//
+//	return 0;
+//}
 
 static size_t tss_write_callback(char* data, size_t size, size_t nmemb, tss_response* response)
 {
