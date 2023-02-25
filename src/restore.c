@@ -3355,6 +3355,15 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
     if(idevicerestore_debug && request) {
         debug_plist(request);
     }
+
+    FILE *testf = fopen("/tmp/cryptex_request.plist", "rb");
+    fseek(testf, 0, SEEK_END);
+    size_t testf_sz = ftell(testf);
+    fseek(testf, 0, SEEK_SET);
+    char *testf_buf = calloc(1, testf_sz);
+    fread(testf_buf, 1, testf_sz, testf);
+    plist_from_xml(testf_buf, testf_sz, &response);
+
 	response = tss_request_send(request, client->tss_url);
 	plist_free(request);
 	if (response == NULL) {
