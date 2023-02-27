@@ -846,7 +846,7 @@ static int restore_handle_baseband_updater_output_data(restored_client_t restore
 	return result;
 }
 
-int restore_set_ignore_bb_fail(int input) {
+void restore_set_ignore_bb_fail(int input) {
     g_ignore_bb_fail = input;
 }
 
