@@ -853,7 +853,7 @@ static int restore_handle_bb_update_status_msg(restored_client_t client, plist_t
 	uint8_t accepted = 0;
 	plist_get_bool_val(node, &accepted);
 
-	if (!accepted) {
+	if (!accepted && !g_ignore_bb_fail) {
 		error("ERROR: device didn't accept BasebandData\n");
 		return result;
 	}

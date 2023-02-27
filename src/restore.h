@@ -43,6 +43,8 @@ struct restore_client_t {
 	restored_client_t client;
 };
 
+static bool g_ignore_bb_fail = 0;
+
 int restore_check_mode(struct idevicerestore_client_t* client);
 irecv_device_t restore_get_irecv_device(struct idevicerestore_client_t* client);
 int restore_client_new(struct idevicerestore_client_t* client);
