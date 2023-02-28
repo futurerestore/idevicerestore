@@ -4216,31 +4216,31 @@ int restore_send_buildidentity(restored_client_t restore, struct idevicerestore_
 
 	dict = plist_new_dict();
 
-//    plist_t sep_manifest = plist_copy(plist_dict_get_item(client->sepBuildIdentity, "Manifest"));
-//    plist_t build_identity_manifest = plist_dict_get_item(build_identity, "Manifest");
-//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,Version", NULL);
-//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,PreauthorizationVersion", NULL);
-//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,FakeRoot", NULL);
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemOS");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemVolume");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemTrustCache");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppOS");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppVolume");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppTrustCache");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainOS");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainVolume");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainTrustCache");
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemOS", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemVolume", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemTrustCache", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppOS", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppVolume", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppTrustCache", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainOS", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainVolume", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainTrustCache", NULL);
-//    debug("build_identity:\n");
-//    debug_plist(build_identity);
+    plist_t sep_manifest = plist_copy(plist_dict_get_item(client->sepBuildIdentity, "Manifest"));
+    plist_t build_identity_manifest = plist_dict_get_item(build_identity, "Manifest");
+    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,Version", NULL);
+    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,PreauthorizationVersion", NULL);
+    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,FakeRoot", NULL);
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemOS");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemVolume");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemTrustCache");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppOS");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppVolume");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppTrustCache");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainOS");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainVolume");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainTrustCache");
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemOS", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemVolume", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemTrustCache", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppOS", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppVolume", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppTrustCache", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainOS", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainVolume", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainTrustCache", NULL);
+    debug("build_identity:\n");
+    debug_plist(build_identity);
 
     plist_dict_set_item(dict, "BuildIdentityDict", plist_copy(build_identity));
 
