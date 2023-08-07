@@ -20,7 +20,7 @@ if(NOT SUBPROJECT_BUILD)
 			set(CMAKE_OSX_DEPLOYMENT_TARGET "${MINVER}")
 		endif()
 		set(PROJECT_C_FLAGS "-arch ${ARCH} -fembed-bitcode=off -pthread -mrelax-all -Wno-deprecated-declarations -Wno-int-conversion")
-		if(NOT "${CMAKE_BUILD_TYPE}" MATCHES "Debug")
+		if(NOT "${CMAKE_BUILD_TYPE}" MATCHES "Debug" AND NOT "${CMAKE_BUILD_TYPE}" MATCHES "RelWithDebInfo")
 			set(PROJECT_C_FLAGS "-flto=thin ${PROJECT_C_FLAGS}")
 		endif()
 	elseif("${CMAKE_HOST_SYSTEM_NAME}" MATCHES "Linux")
@@ -109,6 +109,10 @@ execute_process(COMMAND git remote get-url origin WORKING_DIRECTORY "${CMAKE_SOU
 string(REPLACE ".git" "" PACKAGE_URL PACKAGE_URL1)
 add_definitions(
 		-DIDEVICERESTORE_NOMAIN=1
+		-DHAVE_IDEVICE_E_TIMEOUT=1
+		-DHAVE_RESTORE_E_RECEIVE_TIMEOUT=1
+		-DHAVE_ENUM_IDEVICE_CONNECTION_TYPE=1
+		-DHAVE_REVERSE_PROXY=1
 		-DHAVE_OPENSSL=1
 		-DPACKAGE_VERSION="${CMAKE_PROJECT_VERSION}"
 		-DPACKAGE_URL="${PACKAGE_URL}"
