@@ -3375,21 +3375,32 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
 
     if(access(thefile, F_OK) != 0) {
         FILE *requestf = fopen(thefile, "wb");
-        uint32_t size = 0;
-        char* data = NULL;
-        if(plist_to_xml(request, &data, &size) == PLIST_ERR_SUCCESS) {
-            fwrite(data, 1, size, requestf);
+        if(requestf) {
+            uint32_t size = 0;
+            char *data = NULL;
+            if (plist_to_xml(request, &data, &size) == PLIST_ERR_SUCCESS) {
+                if (data && size) {
+                    fwrite(data, 1, size, requestf);
+                    fflush(requestf);
+                    fclose(requestf);
+                }
+            }
         }
     }
 
     if(access(thefile, F_OK) == 0) {
         FILE *requestf = fopen(thefile, "rb");
-        fseek(requestf, 0, SEEK_END);
-        size_t size = ftell(requestf);
-        fseek(requestf, 0, SEEK_SET);
-        char *data = calloc(1, size);
-        fread(data, 1, size, requestf);
-        plist_from_xml(data, size, &request);
+        if(requestf) {
+            fseek(requestf, 0, SEEK_END);
+            size_t size = ftell(requestf);
+            fseek(requestf, 0, SEEK_SET);
+            char *data = calloc(1, size);
+            fread(data, 1, size, requestf);
+            fclose(requestf);
+            if(data && size) {
+                plist_from_xml(data, size, &request);
+            }
+        }
     }
 
 	response = tss_request_send(request, client->tss_url);
@@ -3401,11 +3412,17 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
 
 	if (plist_dict_get_item(response, response_ticket)) {
 		info("Received %s\n", response_ticket);
-        FILE *resonspef = fopen(thefile2, "wb");
-        uint32_t size = 0;
-        char* data = NULL;
-        if(plist_to_xml(response, &data, &size) == PLIST_ERR_SUCCESS) {
-            fwrite(data, 1, size, resonspef);
+        FILE *resonspef = fopen(thefile2, "wb+");
+        if(resonspef) {
+            uint32_t size = 0;
+            char *data = NULL;
+            if (plist_to_xml(response, &data, &size) == PLIST_ERR_SUCCESS) {
+                if(data && size) {
+                    fwrite(data, 1, size, resonspef);
+                    fflush(resonspef);
+                    fclose(resonspef);
+                }
+            }
         }
 	} else {
 		error("ERROR: No '%s' in TSS response, this might not work\n", response_ticket);
