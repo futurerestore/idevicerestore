@@ -3369,66 +3369,113 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
 	info("Sending %s TSS request...\n", s_updater_name);
     const char *thefile = "/tmp/cryptex_request.plist";
     const char *thefile2 = "/tmp/cryptex_response.plist";
-    if(idevicerestore_debug && request) {
-        debug_plist(request);
-    }
+    const char *cryptex_cache = getenv("IDR_ENABLE_CRYPTEX_CACHE");
+    // info("DEBUG: 1337: %d\n", __LINE__);
+    if(access(thefile2, F_OK) != 0) {
+        // info("DEBUG: 1337: %d\n", __LINE__);
+        if (idevicerestore_debug && request) {
+            debug_plist(request);
+        }
 
-    if(access(thefile, F_OK) != 0) {
-        FILE *requestf = fopen(thefile, "wb");
-        if(requestf) {
-            uint32_t size = 0;
-            char *data = NULL;
-            if (plist_to_xml(request, &data, &size) == PLIST_ERR_SUCCESS) {
-                if (data && size) {
-                    fwrite(data, 1, size, requestf);
-                    fflush(requestf);
-                    fclose(requestf);
+        if ((access(thefile, F_OK) != 0) && cryptex_cache) {
+            // info("DEBUG: 1337: %d\n", __LINE__);
+            FILE *requestf = fopen(thefile, "wb+");
+            if (requestf) {
+                // info("DEBUG: 1337: %d\n", __LINE__);
+                uint32_t size = 0;
+                char *data = NULL;
+                if (plist_to_xml(request, &data, &size) == PLIST_ERR_SUCCESS) {
+                    // info("DEBUG: 1337: %d\n", __LINE__);
+                    if (data && size) {
+                        // info("DEBUG: 1337: %d\n", __LINE__);
+                        fwrite(data, 1, size, requestf);
+                        fflush(requestf);
+                        fclose(requestf);
+                    }
                 }
             }
-        }
-    }
-
-    if(access(thefile, F_OK) == 0) {
-        FILE *requestf = fopen(thefile, "rb");
-        if(requestf) {
-            fseek(requestf, 0, SEEK_END);
-            size_t size = ftell(requestf);
-            fseek(requestf, 0, SEEK_SET);
-            char *data = calloc(1, size);
-            fread(data, 1, size, requestf);
-            fclose(requestf);
-            if(data && size) {
-                plist_from_xml(data, size, &request);
+        } else {
+            // info("DEBUG: 1337: %d\n", __LINE__);
+            if(cryptex_cache) {
+              FILE *requestf = fopen(thefile, "rb+");
+              if (requestf) {
+                // info("DEBUG: 1337: %d\n", __LINE__);
+                fseek(requestf, 0, SEEK_END);
+                size_t size = ftell(requestf);
+                fseek(requestf, 0, SEEK_SET);
+                char *data = calloc(1, size);
+                fread(data, 1, size, requestf);
+                fclose(requestf);
+                if (data && size) {
+                  // info("DEBUG: 1337: %d\n", __LINE__);
+                  plist_from_xml(data, size, &request);
+                }
+              }
             }
         }
-    }
 
-	response = tss_request_send(request, client->tss_url);
-	plist_free(request);
-	if (response == NULL) {
-		error("ERROR: Unable to fetch %s ticket\n", s_updater_name);
-		return NULL;
-	}
-
-	if (plist_dict_get_item(response, response_ticket)) {
-		info("Received %s\n", response_ticket);
-        FILE *resonspef = fopen(thefile2, "wb+");
-        if(resonspef) {
+        response = tss_request_send(request, client->tss_url);
+        plist_free(request);
+        // info("DEBUG: 1337: %d\n", __LINE__);
+        if (response == NULL) {
+            // info("DEBUG: 1337: %d\n", __LINE__);
+            error("ERROR: Unable to fetch %s ticket\n", s_updater_name);
+            return NULL;
+        }
+        if(cryptex_cache) {
+          // info("DEBUG: 1337: %d\n", __LINE__);
+          FILE *resonspef = fopen(thefile2, "wb+");
+          if (resonspef) {
+            //            info("DEBUG: 1337: cryptex: %d\n", __LINE__);
             uint32_t size = 0;
             char *data = NULL;
             if (plist_to_xml(response, &data, &size) == PLIST_ERR_SUCCESS) {
-                if(data && size) {
-                    fwrite(data, 1, size, resonspef);
-                    fflush(resonspef);
-                    fclose(resonspef);
-                }
+              //                info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+              if (data && size) {
+                //                    info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+                fwrite(data, 1, size, resonspef);
+                fflush(resonspef);
+                fclose(resonspef);
+              }
             }
+          }
         }
+    } else {
+      if(cryptex_cache) {
+        FILE *resonspef = fopen(thefile2, "rb+");
+        if(resonspef) {
+          // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+          fseek(resonspef, 0, SEEK_END);
+          size_t size = ftell(resonspef);
+          fseek(resonspef, 0, SEEK_SET);
+          char *data = calloc(1, size);
+          fread(data, 1, size, resonspef);
+          fclose(resonspef);
+          if(data && size) {
+            // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+            if(response) {
+              // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+              free(response);
+            }
+            // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+            plist_from_xml(data, size, &response);
+            // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+          }
+        }
+      }
+    }
+	if (plist_dict_get_item(response, response_ticket)) {
+        // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+		info("Received %s\n", response_ticket);
+        if(idevicerestore_debug && response)
+            debug_plist(response);
 	} else {
+        // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
 		error("ERROR: No '%s' in TSS response, this might not work\n", response_ticket);
         if(idevicerestore_debug && response)
 		    debug_plist(response);
 	}
+    // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
 
 	return response;
 }
