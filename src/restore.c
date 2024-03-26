@@ -846,6 +846,10 @@ static int restore_handle_baseband_updater_output_data(restored_client_t restore
 	return result;
 }
 
+void restore_set_ignore_bb_fail(int input) {
+    g_ignore_bb_fail = input;
+}
+
 static int restore_handle_bb_update_status_msg(restored_client_t client, plist_t msg)
 {
 	int result = -1;
@@ -853,7 +857,7 @@ static int restore_handle_bb_update_status_msg(restored_client_t client, plist_t
 	uint8_t accepted = 0;
 	plist_get_bool_val(node, &accepted);
 
-	if (!accepted) {
+	if (!accepted && !g_ignore_bb_fail) {
 		error("ERROR: device didn't accept BasebandData\n");
 		return result;
 	}
@@ -3363,23 +3367,115 @@ static plist_t restore_get_cryptex1_firmware_data(restored_client_t restore, str
 	plist_free(parameters);
 
 	info("Sending %s TSS request...\n", s_updater_name);
-    if(idevicerestore_debug && request) {
-        debug_plist(request);
-    }
-	response = tss_request_send(request, client->tss_url);
-	plist_free(request);
-	if (response == NULL) {
-		error("ERROR: Unable to fetch %s ticket\n", s_updater_name);
-		return NULL;
-	}
+    const char *thefile = "/tmp/cryptex_request.plist";
+    const char *thefile2 = "/tmp/cryptex_response.plist";
+    const char *cryptex_cache = getenv("IDR_ENABLE_CRYPTEX_CACHE");
+    // info("DEBUG: 1337: %d\n", __LINE__);
+    if(access(thefile2, F_OK) != 0) {
+        // info("DEBUG: 1337: %d\n", __LINE__);
+        if (idevicerestore_debug && request) {
+            debug_plist(request);
+        }
 
+        if ((access(thefile, F_OK) != 0) && cryptex_cache) {
+            // info("DEBUG: 1337: %d\n", __LINE__);
+            FILE *requestf = fopen(thefile, "wb+");
+            if (requestf) {
+                // info("DEBUG: 1337: %d\n", __LINE__);
+                uint32_t size = 0;
+                char *data = NULL;
+                if (plist_to_xml(request, &data, &size) == PLIST_ERR_SUCCESS) {
+                    // info("DEBUG: 1337: %d\n", __LINE__);
+                    if (data && size) {
+                        // info("DEBUG: 1337: %d\n", __LINE__);
+                        fwrite(data, 1, size, requestf);
+                        fflush(requestf);
+                        fclose(requestf);
+                    }
+                }
+            }
+        } else {
+            // info("DEBUG: 1337: %d\n", __LINE__);
+            if(cryptex_cache) {
+              FILE *requestf = fopen(thefile, "rb+");
+              if (requestf) {
+                // info("DEBUG: 1337: %d\n", __LINE__);
+                fseek(requestf, 0, SEEK_END);
+                size_t size = ftell(requestf);
+                fseek(requestf, 0, SEEK_SET);
+                char *data = calloc(1, size);
+                fread(data, 1, size, requestf);
+                fclose(requestf);
+                if (data && size) {
+                  // info("DEBUG: 1337: %d\n", __LINE__);
+                  plist_from_xml(data, size, &request);
+                }
+              }
+            }
+        }
+
+        response = tss_request_send(request, client->tss_url);
+        plist_free(request);
+        // info("DEBUG: 1337: %d\n", __LINE__);
+        if (response == NULL) {
+            // info("DEBUG: 1337: %d\n", __LINE__);
+            error("ERROR: Unable to fetch %s ticket\n", s_updater_name);
+            return NULL;
+        }
+        if(cryptex_cache) {
+          // info("DEBUG: 1337: %d\n", __LINE__);
+          FILE *resonspef = fopen(thefile2, "wb+");
+          if (resonspef) {
+            //            info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+            uint32_t size = 0;
+            char *data = NULL;
+            if (plist_to_xml(response, &data, &size) == PLIST_ERR_SUCCESS) {
+              //                info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+              if (data && size) {
+                //                    info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+                fwrite(data, 1, size, resonspef);
+                fflush(resonspef);
+                fclose(resonspef);
+              }
+            }
+          }
+        }
+    } else {
+      if(cryptex_cache) {
+        FILE *resonspef = fopen(thefile2, "rb+");
+        if(resonspef) {
+          // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+          fseek(resonspef, 0, SEEK_END);
+          size_t size = ftell(resonspef);
+          fseek(resonspef, 0, SEEK_SET);
+          char *data = calloc(1, size);
+          fread(data, 1, size, resonspef);
+          fclose(resonspef);
+          if(data && size) {
+            // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+            if(response) {
+              // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+              free(response);
+            }
+            // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+            plist_from_xml(data, size, &response);
+            // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
+          }
+        }
+      }
+    }
 	if (plist_dict_get_item(response, response_ticket)) {
+        // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
 		info("Received %s\n", response_ticket);
+        if(idevicerestore_debug && response)
+            debug_plist(response);
 	} else {
+        // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
 		error("ERROR: No '%s' in TSS response, this might not work\n", response_ticket);
         if(idevicerestore_debug && response)
 		    debug_plist(response);
 	}
+    // info("DEBUG: 1337: cryptex: %d\n", __LINE__);
 
 	return response;
 }
@@ -4228,31 +4324,31 @@ int restore_send_buildidentity(restored_client_t restore, struct idevicerestore_
 
 	dict = plist_new_dict();
 
-//    plist_t sep_manifest = plist_copy(plist_dict_get_item(client->sepBuildIdentity, "Manifest"));
-//    plist_t build_identity_manifest = plist_dict_get_item(build_identity, "Manifest");
-//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,Version", NULL);
-//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,PreauthorizationVersion", NULL);
-//    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,FakeRoot", NULL);
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemOS");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemVolume");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemTrustCache");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppOS");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppVolume");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppTrustCache");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainOS");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainVolume");
-//    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainTrustCache");
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemOS", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemVolume", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemTrustCache", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppOS", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppVolume", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppTrustCache", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainOS", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainVolume", NULL);
-//    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainTrustCache", NULL);
-//    debug("build_identity:\n");
-//    debug_plist(build_identity);
+    plist_t sep_manifest = plist_copy(plist_dict_get_item(client->sepBuildIdentity, "Manifest"));
+    plist_t build_identity_manifest = plist_dict_get_item(build_identity, "Manifest");
+    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,Version", NULL);
+    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,PreauthorizationVersion", NULL);
+    _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,FakeRoot", NULL);
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemOS");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemVolume");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,SystemTrustCache");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppOS");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppVolume");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,AppTrustCache");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainOS");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainVolume");
+    plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainTrustCache");
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemOS", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemVolume", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemTrustCache", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppOS", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppVolume", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppTrustCache", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainOS", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainVolume", NULL);
+    _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainTrustCache", NULL);
+    debug("build_identity:\n");
+    debug_plist(build_identity);
 
     plist_dict_set_item(dict, "BuildIdentityDict", plist_copy(build_identity));
 
