@@ -1648,7 +1648,7 @@ int main(int argc, char* argv[]) {
 		client->flags |= FLAG_INTERACTIVE;
 	}
 
-    while ((opt = getopt_long(argc, argv, "dhces:xtplibgo:u:nC:wkyPRT:zv", longopts, &optindex)) > 0) {
+	while ((opt = getopt_long(argc, argv, "dhces:xtplibgo:u:nC:wkyPRT:zv", longopts, &optindex)) > 0) {
 		switch (opt) {
 		case 'h':
 			usage(argc, argv, 0);
