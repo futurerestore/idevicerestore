@@ -304,7 +304,7 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
 	unsigned char* data = NULL;
 	char* path = NULL;
 	irecv_error_t err = 0;
-	int ret;
+	int ret = 0;
  
     if (!client->recovery_custom_component_function) {
         if (client->tss) {
@@ -338,16 +338,12 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
             ret = extract_component(client->ipsw, path, &component_data, &component_size);
             if (ret < 0) {
                 error("ERROR: Unable to extract '%s' component\n", component);
+                free(path);
                 return -1;
             }
         }
 
         free(path);
-        if (ret < 0) {
-            error("ERROR: Unable to extract component: %s\n", component);
-            return -1;
-        }
-
         ret = personalize_component(component, component_data, component_size, client->tss, &data, &size);
         free(component_data);
         if (ret < 0) {
