@@ -120,30 +120,44 @@ int recovery_set_autoboot(struct idevicerestore_client_t* client, int enable) {
 	return 0;
 }
 
+int received_cb(irecv_client_t client, const irecv_event_t* event)
+{
+  if (event->type == IRECV_RECEIVED) {
+    int i = 0;
+    int size = event->size;
+    const char* data = event->data;
+    for (i = 0; i < size; i++) {
+      printf("%c", data[i]);
+    }
+  }
+
+  return 0;
+}
+
 int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build_identity)
 {
-	if (client->build_major >= 8) {
-		client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress");
-	} else if (client->macos_variant) {
-		client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress -restore");
-	}
+      if (client->build_major >= 8) {
+              client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress");
+      } else if (client->macos_variant) {
+              client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress -restore");
+      }
 
-	/* upload data to make device boot restore mode */
-	if(client->recovery == NULL) {
-		if (recovery_client_new(client) < 0) {
-			return -1;
-		}
-	}
+      /* upload data to make device boot restore mode */
+      if(client->recovery == NULL) {
+              if (recovery_client_new(client) < 0) {
+                      return -1;
+              }
+      }
 
-	if ((client->build_major > 8) && !(client->flags & FLAG_CUSTOM)) {
-		if (!client->image4supported) {
-			/* send ApTicket */
-			if (recovery_send_ticket(client) < 0) {
-				error("ERROR: Unable to send APTicket\n");
-				return -1;
-			}
-		}
-	}
+      if ((client->build_major > 8) && !(client->flags & FLAG_CUSTOM)) {
+              if (!client->image4supported) {
+                      /* send ApTicket */
+                      if (recovery_send_ticket(client) < 0) {
+                              error("ERROR: Unable to send APTicket\n");
+                              return -1;
+                      }
+              }
+      }
 
     //no need to set auto-boot false when we want to just boot the device
 	if ((client->flags & FLAG_BOOT) == 0) if (recovery_set_autoboot(client, 0) < 0) return -1;
@@ -205,17 +219,17 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
         }
     }
     
-	/* send components loaded by iBoot */
-	if (recovery_send_loaded_by_iboot(client, build_identity) < 0) {
-		error("ERROR: Unable to send components supposed to be loaded by iBoot\n");
-		return -1;
-	}
+    /* send components loaded by iBoot */
+    if (recovery_send_loaded_by_iboot(client, build_identity) < 0) {
+            error("ERROR: Unable to send components supposed to be loaded by iBoot\n");
+            return -1;
+    }
 
-	/* send devicetree and load it */
-	if (recovery_send_component_and_command(client, build_identity, "RestoreDeviceTree", "devicetree") < 0) {
-		error("ERROR: Unable to send DeviceTree\n");
-		return -1;
-	}
+    /* send devicetree and load it */
+    if (recovery_send_component_and_command(client, build_identity, "RestoreDeviceTree", "devicetree") < 0) {
+            error("ERROR: Unable to send DeviceTree\n");
+            return -1;
+    }
 
     if(!(client->flags & FLAG_NO_RSEP)) {
         if (build_identity_has_component(build_identity, "RestoreSEP")) {
@@ -231,13 +245,13 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 
     /* send kernelcache and load it */
 
-	mutex_lock(&client->device_event_mutex);
-	if (recovery_send_kernelcache(client, build_identity) < 0) {
-		mutex_unlock(&client->device_event_mutex);
-		error("ERROR: Unable to send KernelCache\n");
-		return -1;
-	}
-	
+      mutex_lock(&client->device_event_mutex);
+      if (recovery_send_kernelcache(client, build_identity) < 0) {
+              mutex_unlock(&client->device_event_mutex);
+              error("ERROR: Unable to send KernelCache\n");
+              return -1;
+      }
+
 
     if ((client->flags & FLAG_NOBOOTX) == 0){
 	    debug("DEBUG: Waiting for device to disconnect...\n");
