@@ -159,70 +159,70 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
               }
       }
 
-    //no need to set auto-boot false when we want to just boot the device
-	if ((client->flags & FLAG_BOOT) == 0) if (recovery_set_autoboot(client, 0) < 0) return -1;
+    info("Recovery Mode Environment:\n");
+    char* value = NULL;
+    irecv_getenv(client->recovery->client, "build-version", &value);
+    info("iBoot build-version=%s\n", (value) ? value : "(unknown)");
+    free(value);
+    value = NULL;
 
-	info("Recovery Mode Environment:\n");
-	char* value = NULL;
-	irecv_getenv(client->recovery->client, "build-version", &value);
-	info("iBoot build-version=%s\n", (value) ? value : "(unknown)");
-	free(value);
-	value = NULL;
+    irecv_getenv(client->recovery->client, "build-style", &value);
+    info("iBoot build-style=%s\n", (value) ? value : "(unknown)");
+    free(value);
+    value = NULL;
 
-	irecv_getenv(client->recovery->client, "build-style", &value);
-	info("iBoot build-style=%s\n", (value) ? value : "(unknown)");
-	free(value);
-	value = NULL;
+    unsigned long boot_stage = 0;
+    irecv_getenv(client->recovery->client, "boot-stage", &value);
+    if (value) {
+      boot_stage = strtoul(value, NULL, 0);
+    }
 
-	unsigned long boot_stage = 0;
-	irecv_getenv(client->recovery->client, "boot-stage", &value);
-	if (value) {
-		boot_stage = strtoul(value, NULL, 0);
-	}
-	if (boot_stage > 0) {
-		info("iBoot boot-stage=%s\n", value);
-		free(value);
-		value = NULL;
-		if (boot_stage != 2) {
-			error("ERROR: iBoot should be at boot stage 2, continuing anyway...\n");
-		}
-	}
+    if (boot_stage > 0) {
+      info("iBoot boot-stage=%s\n", value);
+      free(value);
+      value = NULL;
+      if (boot_stage != 2) {
+        error("ERROR: iBoot should be at boot stage 2, continuing anyway...\n");
+      }
+    }
 
-	unsigned long radio_error = 0;
-	irecv_getenv(client->recovery->client, "radio-error", &value);
-	if (value) {
-		radio_error = strtoul(value, NULL, 0);
-	}
-	if (radio_error > 0) {
-		info("radio-error=%s\n", value);
-		free(value);
-		value = NULL;
-		irecv_getenv(client->recovery->client, "radio-error-string", &value);
-		if (value) {
-			info("radio-error-string=%s\n", value);
-			free(value);
-			value = NULL;
-		}
-	}
+    unsigned long radio_error = 0;
+    irecv_getenv(client->recovery->client, "radio-error", &value);
+    if (value) {
+            radio_error = strtoul(value, NULL, 0);
+    }
+    if (radio_error > 0) {
+            info("radio-error=%s\n", value);
+            free(value);
+            value = NULL;
+            irecv_getenv(client->recovery->client, "radio-error-string", &value);
+            if (value) {
+                    info("radio-error-string=%s\n", value);
+                    free(value);
+                    value = NULL;
+            }
+    }
 
-	/* send logo and show it */
-	if (recovery_send_applelogo(client, build_identity) < 0) {
-		error("ERROR: Unable to send AppleLogo\n");
-		return -1;
-	}
+    if (recovery_set_autoboot(client, 0) < 0) {
+      return -1;
+    }
 
-    /* send ramdisk and run it */
-    if ((client->flags & FLAG_BOOT) == 0) {
-        if (recovery_send_ramdisk(client, build_identity) < 0) {
-            error("ERROR: Unable to send Ramdisk\n");
+    /* send logo and show it */
+    if (recovery_send_applelogo(client, build_identity) < 0) {
+            error("ERROR: Unable to send AppleLogo\n");
             return -1;
-        }
     }
     
     /* send components loaded by iBoot */
     if (recovery_send_loaded_by_iboot(client, build_identity) < 0) {
             error("ERROR: Unable to send components supposed to be loaded by iBoot\n");
             return -1;
+    }
+
+    /* send ramdisk and run it */
+    if (recovery_send_ramdisk(client, build_identity) < 0) {
+      error("ERROR: Unable to send Ramdisk\n");
+      return -1;
     }
 
     /* send devicetree and load it */
@@ -245,25 +245,25 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 
     /* send kernelcache and load it */
 
-      mutex_lock(&client->device_event_mutex);
-      if (recovery_send_kernelcache(client, build_identity) < 0) {
-              mutex_unlock(&client->device_event_mutex);
-              error("ERROR: Unable to send KernelCache\n");
-              return -1;
-      }
-
-
-    if ((client->flags & FLAG_NOBOOTX) == 0){
-	    debug("DEBUG: Waiting for device to disconnect...\n");
-	    cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 30000);
-	    if (client->mode == MODE_RECOVERY || (client->flags & FLAG_QUIT)) {
-		    mutex_unlock(&client->device_event_mutex);
-		    error("ERROR: Failed to place device in restore mode\n");
-		    return -1;
-	    }
-        mutex_unlock(&client->device_event_mutex);
+    mutex_lock(&client->device_event_mutex);
+    if (recovery_send_kernelcache(client, build_identity) < 0) {
+      mutex_unlock(&client->device_event_mutex);
+      error("ERROR: Unable to send KernelCache\n");
+      return -1;
     }
-	return 0;
+
+
+  if ((client->flags & FLAG_NOBOOTX) == 0){
+    debug("DEBUG: Waiting for device to disconnect...\n");
+    cond_wait_timeout(&client->device_event_cond, &client->device_event_mutex, 30000);
+    if (client->mode == MODE_RECOVERY || (client->flags & FLAG_QUIT)) {
+      mutex_unlock(&client->device_event_mutex);
+      error("ERROR: Failed to place device in restore mode\n");
+      return -1;
+    }
+    mutex_unlock(&client->device_event_mutex);
+  }
+  return 0;
 }
 
 int recovery_send_ticket(struct idevicerestore_client_t* client)
