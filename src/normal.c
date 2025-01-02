@@ -29,6 +29,7 @@
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 #include <libimobiledevice/preboard.h>
+#include <usbmuxd.h>
 
 #include "common.h"
 #include "normal.h"
@@ -233,12 +234,6 @@ int normal_enter_recovery(struct idevicerestore_client_t* client)
 		return -1;
 	}
 
-	/* unpair the device */
-	lockdown_error = lockdownd_unpair(lockdown, NULL);
-	if (lockdown_error != LOCKDOWN_E_SUCCESS) {
-		error("WARNING: Could not unpair device\n");
-	}
-
 	lockdown_error = lockdownd_enter_recovery(lockdown);
 	if (lockdown_error == LOCKDOWN_E_SESSION_INACTIVE) {
 		lockdownd_client_free(lockdown);
@@ -285,6 +280,9 @@ int normal_enter_recovery(struct idevicerestore_client_t* client)
 		return -1;
 	}
 
+	/* remove pair record for given device */
+	usbmuxd_delete_pair_record(client->udid);
+
 	return 0;
 }
 
@@ -325,7 +323,7 @@ plist_t normal_get_lockdown_value(struct idevicerestore_client_t* client, const 
 	return node;
 }
 
-static int normal_get_nonce_by_key(struct idevicerestore_client_t* client, const char* key, unsigned char** nonce, int* nonce_size)
+static int normal_get_nonce_by_key(struct idevicerestore_client_t* client, const char* key, unsigned char** nonce, unsigned int* nonce_size)
 {
 	plist_t nonce_node = normal_get_lockdown_value(client, NULL, key);
 
@@ -336,18 +334,30 @@ static int normal_get_nonce_by_key(struct idevicerestore_client_t* client, const
 
 	uint64_t n_size = 0;
 	plist_get_data_val(nonce_node, (char**)nonce, &n_size);
-	*nonce_size = (int)n_size;
+	*nonce_size = (unsigned int)n_size;
 	plist_free(nonce_node);
 
 	return 0;
 }
 
-int normal_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+int normal_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, unsigned int* nonce_size)
 {
+	plist_t node = normal_get_lockdown_value(client, NULL, "ApParameters");
+	if (PLIST_IS_DICT(node)) {
+		plist_t nonce_node = plist_dict_get_item(node, "SepNonce");
+		if (nonce_node) {
+			uint64_t n_size = 0;
+			plist_get_data_val(nonce_node, (char**)nonce, &n_size);
+			*nonce_size = (unsigned int)n_size;
+			plist_free(node);
+			return 0;
+		}
+	}
+	plist_free(node);
 	return normal_get_nonce_by_key(client, "SEPNonce", nonce, nonce_size);
 }
 
-int normal_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+int normal_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, unsigned int* nonce_size)
 {
 	return normal_get_nonce_by_key(client, "ApNonce", nonce, nonce_size);
 }
@@ -367,7 +377,7 @@ int normal_is_image4_supported(struct idevicerestore_client_t* client)
 	return bval;
 }
 
-int normal_get_preflight_info(struct idevicerestore_client_t* client, plist_t *preflight_info)
+int normal_get_firmware_preflight_info(struct idevicerestore_client_t* client, plist_t *preflight_info)
 {
 	uint8_t has_telephony_capability = 0;
 	plist_t node;
@@ -388,6 +398,18 @@ int normal_get_preflight_info(struct idevicerestore_client_t* client, plist_t *p
 		*preflight_info = NULL;
 	}
 
+	return 0;
+}
+
+int normal_get_preflight_info(struct idevicerestore_client_t* client, plist_t *preflight_info)
+{
+	plist_t node = normal_get_lockdown_value(client, NULL, "PreflightInfo");
+	if (PLIST_IS_DICT(node)) {
+		*preflight_info = node;
+	} else {
+		debug("DEBUG: No PreflightInfo available.\n");
+		*preflight_info = NULL;
+	}
 	return 0;
 }
 
@@ -464,13 +486,13 @@ int normal_handle_create_stashbag(struct idevicerestore_client_t* client, plist_
 		} else {
 			plist_t node;
 
-			if (_plist_dict_get_bool(pl, "Skip")) {
+			if (plist_dict_get_bool(pl, "Skip")) {
 				result = 0;
 				info("Device does not require stashbag.\n");
 				break;
 			}
 
-			if (_plist_dict_get_bool(pl, "ShowDialog")) {
+			if (plist_dict_get_bool(pl, "ShowDialog")) {
 				info("Device requires stashbag.\n");
 				printf("******************************************************************************\n"
 				       "* Please enter your passcode on the device.  The device will store a token   *\n"
@@ -493,13 +515,13 @@ int normal_handle_create_stashbag(struct idevicerestore_client_t* client, plist_
 				plist_free(pl);
 				break;
 			}
-			if (_plist_dict_get_bool(pl, "Timeout")) {
+			if (plist_dict_get_bool(pl, "Timeout")) {
 				error("ERROR: Timeout while waiting for user to enter passcode.\n");
 				result = -2;
 				plist_free(pl);
 				break;
 			}
-			if (_plist_dict_get_bool(pl, "HideDialog")) {
+			if (plist_dict_get_bool(pl, "HideDialog")) {
 				plist_free(pl);
 				/* hide dialog */
 				result = 1;
@@ -590,7 +612,7 @@ int normal_handle_commit_stashbag(struct idevicerestore_client_t* client, plist_
 			}
 			error("ERROR: Could not commit stashbag: %s\n", (strval) ? strval : "(Unknown error)");
 			free(strval);
-		} else if (_plist_dict_get_bool(pl, "StashbagCommitComplete")) {
+		} else if (plist_dict_get_bool(pl, "StashbagCommitComplete")) {
 			info("Stashbag committed!\n");
 			result = 0;
 		} else {

@@ -29,8 +29,9 @@
 #include <libimobiledevice/restore.h>
 #include <libimobiledevice/libimobiledevice.h>
 
+#include <libtatsu/tss.h>
+
 #include "idevicerestore.h"
-#include "tss.h"
 #include "img3.h"
 #include "restore.h"
 #include "recovery.h"
@@ -188,6 +189,20 @@ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build
 	info("iBoot build-style=%s\n", (value) ? value : "(unknown)");
 	free(value);
 	value = NULL;
+
+	unsigned long boot_stage = 0;
+	irecv_getenv(client->recovery->client, "boot-stage", &value);
+	if (value) {
+		boot_stage = strtoul(value, NULL, 0);
+	}
+	if (boot_stage > 0) {
+		info("iBoot boot-stage=%s\n", value);
+		free(value);
+		value = NULL;
+		if (boot_stage != 2) {
+			error("ERROR: iBoot should be at boot stage 2, continuing anyway...\n");
+		}
+	}
 
 	unsigned long radio_error = 0;
 	irecv_getenv(client->recovery->client, "radio-error", &value);
@@ -578,7 +593,7 @@ int recovery_is_image4_supported(struct idevicerestore_client_t* client)
 	return (device_info->ibfl & IBOOT_FLAG_IMAGE4_AWARE);
 }
 
-int recovery_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+int recovery_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, unsigned int* nonce_size)
 {
 	if(client->recovery == NULL) {
 		if (recovery_client_new(client) < 0) {
@@ -603,7 +618,7 @@ int recovery_get_ap_nonce(struct idevicerestore_client_t* client, unsigned char*
 	return 0;
 }
 
-int recovery_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, int* nonce_size)
+int recovery_get_sep_nonce(struct idevicerestore_client_t* client, unsigned char** nonce, unsigned int* nonce_size)
 {
 	if(client->recovery == NULL) {
 		if (recovery_client_new(client) < 0) {

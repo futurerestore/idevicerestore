@@ -74,7 +74,6 @@ endif()
 add_library(idevicerestore
 		src/idevicerestore.c
 		src/common.c
-		src/tss.c
 		src/fls.c
 		src/mbn.c
 		src/img3.c

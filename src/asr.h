@@ -30,6 +30,8 @@ extern "C" {
 
 #include <libimobiledevice/libimobiledevice.h>
 
+#define ASR_DEFAULT_PORT 12345
+
 typedef void (*asr_progress_cb_t)(double, void*);
 
 struct asr_client {
@@ -41,15 +43,18 @@ struct asr_client {
 };
 typedef struct asr_client *asr_client_t;
 
-int asr_open_with_timeout(idevice_t device, asr_client_t* asr);
+struct ipsw_file_handle;
+typedef struct ipsw_file_handle* ipsw_file_handle_t;
+
+int asr_open_with_timeout(idevice_t device, asr_client_t* asr, uint16_t port);
 void asr_set_progress_callback(asr_client_t asr, asr_progress_cb_t, void* userdata);
 int asr_send(asr_client_t asr, plist_t data);
 int asr_receive(asr_client_t asr, plist_t* data);
 int asr_send_buffer(asr_client_t asr, const char* data, uint32_t size);
 void asr_free(asr_client_t asr);
-int asr_perform_validation(asr_client_t asr, const char* filesystem);
-int asr_send_payload(asr_client_t asr, const char* filesystem);
-int asr_handle_oob_data_request(asr_client_t asr, plist_t packet, FILE* file);
+int asr_perform_validation(asr_client_t asr, ipsw_file_handle_t file);
+int asr_send_payload(asr_client_t asr, ipsw_file_handle_t file);
+int asr_handle_oob_data_request(asr_client_t asr, plist_t packet, ipsw_file_handle_t file);
 
 
 #ifdef __cplusplus

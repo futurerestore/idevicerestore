@@ -47,6 +47,7 @@ extern "C" {
 #define _MODE_RECOVERY        3
 #define _MODE_RESTORE         4
 #define _MODE_NORMAL          5
+#define _MODE_PORTDFU         6
 
 #define MODE_UNKNOWN  &idevicerestore_modes[_MODE_UNKNOWN]
 #define MODE_WTF      &idevicerestore_modes[_MODE_WTF]
@@ -54,6 +55,7 @@ extern "C" {
 #define MODE_RECOVERY &idevicerestore_modes[_MODE_RECOVERY]
 #define MODE_RESTORE  &idevicerestore_modes[_MODE_RESTORE]
 #define MODE_NORMAL   &idevicerestore_modes[_MODE_NORMAL]
+#define MODE_PORTDFU  &idevicerestore_modes[_MODE_PORTDFU]
 
 #define FLAG_QUIT            1
 
@@ -70,6 +72,9 @@ struct dfu_client_t;
 struct normal_client_t;
 struct restore_client_t;
 struct recovery_client_t;
+struct ipsw_archive;
+
+typedef struct ipsw_archive* ipsw_archive_t;
 
 struct idevicerestore_mode_t {
 	int index;
@@ -126,6 +131,7 @@ struct idevicerestore_client_t {
 	size_t cryptex1appvoldatasize;
 	char *cryptex1apptcdata;
 	size_t cryptex1apptcdatasize;
+	int debug_level;
 	plist_t tss;
 	plist_t tss_localpolicy;
 	plist_t tss_recoveryos_root_ticket;
@@ -142,11 +148,12 @@ struct idevicerestore_client_t {
 	int sepnonce_size;
 	int image4supported;
 	plist_t build_manifest;
+	plist_t firmware_preflight_info;
 	plist_t preflight_info;
+	plist_t parameters;
 	char* udid;
 	char* srnm;
-	char* ipsw;
-	const char* filesystem;
+	ipsw_archive_t ipsw;
 	struct dfu_client_t* dfu;
 	struct restore_client_t* restore;
 	struct recovery_client_t* recovery;
@@ -155,6 +162,8 @@ struct idevicerestore_client_t {
 	struct idevicerestore_mode_t* mode;
 	char* version;
 	char* build;
+	char* device_version;
+	char* device_build;
 	int build_major;
 	char* restore_boot_args;
 	char* cache_dir;
@@ -169,7 +178,11 @@ struct idevicerestore_client_t {
 	cond_t device_event_cond;
 	int ignore_device_add_events;
 	plist_t macos_variant;
+	plist_t recovery_variant;
 	char* restore_variant;
+	char* filesystem;
+	int delete_fs;
+	int async_err;
 };
 
 extern struct idevicerestore_mode_t idevicerestore_modes[];
@@ -234,13 +247,7 @@ char* realpath(const char *filename, char *resolved_name);
 
 void get_user_input(char *buf, int maxlen, int secure);
 
-uint8_t _plist_dict_get_bool(plist_t dict, const char *key);
-uint64_t _plist_dict_get_uint(plist_t dict, const char *key);
-int _plist_dict_copy_uint(plist_t target_dict, plist_t source_dict, const char *key, const char *alt_source_key);
-int _plist_dict_copy_bool(plist_t target_dict, plist_t source_dict, const char *key, const char *alt_source_key);
-int _plist_dict_copy_data(plist_t target_dict, plist_t source_dict, const char *key, const char *alt_source_key);
-int _plist_dict_copy_string(plist_t target_dict, plist_t source_dict, const char *key, const char *alt_source_key);
-int _plist_dict_copy_item(plist_t target_dict, plist_t source_dict, const char *key, const char *alt_source_key);
+const char* path_get_basename(const char* path);
 
 #ifdef __cplusplus
 }

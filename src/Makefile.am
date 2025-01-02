@@ -3,22 +3,24 @@ AM_CFLAGS = \
 	$(LFS_CFLAGS) \
 	$(libirecovery_CFLAGS) \
 	$(libimobiledevice_CFLAGS) \
+	$(libusbmuxd_CFLAGS) \
 	$(libplist_CFLAGS) \
 	$(limd_glue_CFLAGS) \
+	$(libtatsu_CFLAGS) \
 	$(libzip_CFLAGS) \
 	$(zlib_CFLAGS) \
-	$(openssl_CFLAGS) \
 	$(libcurl_CFLAGS)
 
 AM_LDFLAGS = \
 	$(AC_LDFLAGS) \
 	$(libirecovery_LIBS) \
 	$(libimobiledevice_LIBS) \
+	$(libusbmuxd_LIBS) \
 	$(libplist_LIBS) \
 	$(limd_glue_LIBS) \
+	$(libtatsu_LIBS) \
 	$(libzip_LIBS) \
 	$(zlib_LIBS) \
-	$(openssl_LIBS) \
 	$(libcurl_LIBS)
 
 AM_LDADD = $(AC_LDADD)
@@ -40,7 +42,6 @@ idevicerestore_SOURCES = \
 	idevicerestore.c idevicerestore.h \
 	endianness.h \
 	common.c common.h \
-	tss.c tss.h \
 	fls.c fls.h \
 	mbn.c mbn.h \
 	img3.c img3.h \
@@ -53,13 +54,11 @@ idevicerestore_SOURCES = \
 	restore.c restore.h \
 	asr.c asr.h \
 	fdr.c fdr.h \
+	ace3.c ace3.h \
 	limera1n_payload.h \
 	limera1n.c limera1n.h \
 	download.c download.h \
 	locking.c locking.h
-if USE_INTERNAL_SHA
-idevicerestore_SOURCES += sha1.c sha1.h sha512.c sha512.h fixedint.h
-endif
 idevicerestore_CFLAGS = $(AM_CFLAGS)
 idevicerestore_LDFLAGS = $(AM_LDFLAGS)
 idevicerestore_LDADD = $(AM_LDADD)
