@@ -78,34 +78,6 @@ void dfu_client_free(struct idevicerestore_client_t* client)
 	}
 }
 
-int dfu_check_mode(struct idevicerestore_client_t* client, int* mode) {
-	irecv_client_t dfu = NULL;
-	int probe_mode = -1;
-
-	if (client->udid && client->ecid == 0) {
-		/* if we have a UDID but no ECID we can't make sure this is the correct device */
-		return -1;
-	}
-
-	irecv_init();
-	if (irecv_open_with_ecid(&dfu, client->ecid) != IRECV_E_SUCCESS) {
-		return -1;
-	}
-
-	irecv_get_mode(dfu, &probe_mode);
-
-	if ((probe_mode != IRECV_K_DFU_MODE) && (probe_mode != IRECV_K_WTF_MODE)) {
-		irecv_close(dfu);
-		return -1;
-	}
-
-	*mode = (probe_mode == IRECV_K_WTF_MODE) ? _MODE_WTF : _MODE_DFU;
-
-	irecv_close(dfu);
-
-	return 0;
-}
-
 irecv_device_t dfu_get_irecv_device(struct idevicerestore_client_t* client)
 {
 	irecv_client_t dfu = NULL;

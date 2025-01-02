@@ -1770,7 +1770,7 @@ int restore_send_nor(struct idevicerestore_client_t* client, plist_t message)
 			return -1;
 		}
 
-        ret = personalize_component(component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
+        ret = personalize_component(client, component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
         free(component_data);
 		component_data = NULL;
 		component_size = 0;
@@ -1799,7 +1799,7 @@ int restore_send_nor(struct idevicerestore_client_t* client, plist_t message)
 			return -1;
 		}
 
-		ret = personalize_component(component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
+		ret = personalize_component(client, component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
         free(component_data);
 		component_data = NULL;
 		component_size = 0;
@@ -2231,7 +2231,7 @@ leave:
 	return res;
 }
 
-static int restore_send_baseband_data(struct idevicerestore_client_t* client, plist_t message)
+static int restore_send_baseband_data(struct idevicerestore_client_t* client, plist_t message, plist_t identity)
 {
 	int res = -1;
 	uint64_t bb_cert_id = 0;
@@ -2250,6 +2250,8 @@ static int restore_send_baseband_data(struct idevicerestore_client_t* client, pl
 		error("ERROR: %s: idevicerestore client not initialized?!\n", __func__);
 		return -1;
 	}
+
+        plist_t tmp_identity = identity ? identity : client->restore->build_identity;
 
 	info("About to send BasebandData...\n");
 
@@ -2287,7 +2289,7 @@ static int restore_send_baseband_data(struct idevicerestore_client_t* client, pl
 		plist_dict_set_item(parameters, "BbGoldCertId", plist_new_uint(bb_cert_id));
 		plist_dict_set_item(parameters, "BbSNUM", plist_new_data((const char*)bb_snum, bb_snum_size));
 
-		tss_parameters_add_from_manifest(parameters, client->restore->build_identity, true);
+		tss_parameters_add_from_manifest(parameters, tmp_identity, true);
 
 		/* create baseband request */
 		plist_t request = tss_request_new(NULL);
@@ -2309,7 +2311,7 @@ static int restore_send_baseband_data(struct idevicerestore_client_t* client, pl
 		/* add baseband parameters */
 		tss_request_add_baseband_tags(request, parameters, NULL);
 
-		plist_t node = plist_access_path(client->restore->build_identity, 2, "Info", "FDRSupport");
+		plist_t node = plist_access_path(tmp_identity, 2, "Info", "FDRSupport");
 		if (node && plist_get_node_type(node) == PLIST_BOOLEAN) {
 			uint8_t b = 0;
 			plist_get_bool_val(node, &b);
@@ -2336,7 +2338,7 @@ static int restore_send_baseband_data(struct idevicerestore_client_t* client, pl
 	}
 
 	// get baseband firmware file path from build identity
-	plist_t bbfw_path = plist_access_path(client->restore->build_identity, 4, "Manifest", "BasebandFirmware", "Info", "Path");
+	plist_t bbfw_path = plist_access_path(tmp_identity, 4, "Manifest", "BasebandFirmware", "Info", "Path");
 	if (!bbfw_path || plist_get_node_type(bbfw_path) != PLIST_STRING) {
 		error("ERROR: Unable to get BasebandFirmware/Info/Path node\n");
 		plist_free(response);
@@ -2758,7 +2760,7 @@ static plist_t restore_get_se_firmware_data(struct idevicerestore_client_t* clie
 	if(latestManifest == 1)
 		tmp_identity = plist_copy(client->sepBuildIdentity);
 	else
-		tmp_identity = plist_copy(build_identity);
+		tmp_identity = plist_copy(client->restore->build_identity);
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		return NULL;
@@ -2899,7 +2901,7 @@ static plist_t restore_get_savage_firmware_data(struct idevicerestore_client_t* 
 	if(latestManifest == 1)
 		tmp_identity = plist_copy(client->sepBuildIdentity);
 	else
-		tmp_identity = plist_copy(build_identity);
+		tmp_identity = plist_copy(client->restore->build_identity);
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
 		free(comp_name);
@@ -3016,7 +3018,7 @@ static plist_t restore_get_yonkers_firmware_data(struct idevicerestore_client_t*
         }
 
         /* add manifest for current build_identity to parameters */
-        tss_parameters_add_from_manifest(parameters, build_identity, true);
+        tss_parameters_add_from_manifest(parameters, client->restore->build_identity, true);
 
         /* add Yonkers,* tags from info dictionary to parameters */
         plist_dict_merge(&parameters, p_info);
@@ -3058,7 +3060,7 @@ static plist_t restore_get_yonkers_firmware_data(struct idevicerestore_client_t*
     plist_t tmp_identity = NULL;
     if(latestManifest == 1) {
         tmp_identity = plist_copy(client->sepBuildIdentity);
-        tmp_identity = plist_copy(build_identity);
+        tmp_identity = plist_copy(client->restore->build_identity);
     }
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
     } else {
@@ -3219,7 +3221,7 @@ static plist_t restore_get_rose_firmware_data(struct idevicerestore_client_t* cl
 	if(latestManifest == 1) {
         tmp_identity = plist_copy(client->sepBuildIdentity);
     } else {
-        tmp_identity = plist_copy(build_identity);
+        tmp_identity = plist_copy(client->restore->build_identity);
     }
     if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
@@ -3408,7 +3410,7 @@ static plist_t restore_get_veridian_firmware_data(struct idevicerestore_client_t
 	if(latestManifest == 1) {
         tmp_identity = plist_copy(client->sepBuildIdentity);
     } else {
-        tmp_identity = plist_copy(build_identity);
+        tmp_identity = plist_copy(client->restore->build_identity);
     }
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
@@ -3627,7 +3629,7 @@ static plist_t restore_get_tcon_firmware_data(struct idevicerestore_client_t* cl
     if(latestManifest == 1) {
         tmp_identity = plist_copy(client->sepBuildIdentity);
     } else {
-        tmp_identity = plist_copy(build_identity);
+        tmp_identity = plist_copy(client->restore->build_identity);
     }
 	if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
 		error("ERROR: Unable to get path for '%s' component\n", comp_name);
@@ -3801,7 +3803,7 @@ static plist_t restore_get_timer_firmware_data(struct idevicerestore_client_t* c
         } else {
             plist_t info_dict = plist_array_get_item(info_array, 0);
             plist_t hwid = plist_dict_get_item(info_dict, "HardwareID");
-            tag = (uint32_t)_plist_dict_get_uint(info_dict, "TagNumber");
+            tag = (uint32_t)plist_dict_get_uint(info_dict, "TagNumber");
             char key[64];
 
             plist_dict_set_item(parameters, "TagNumber", plist_new_uint(tag));
@@ -3812,25 +3814,25 @@ static plist_t restore_get_timer_firmware_data(struct idevicerestore_client_t* c
             }
 
             snprintf(key, 64, "Timer,ChipID,%u", tag);
-            _plist_dict_copy_uint(parameters, hwid, key, "ChipID");
+            plist_dict_copy_uint(parameters, hwid, key, "ChipID");
 
             snprintf(key, 64, "Timer,BoardID,%u", tag);
-            _plist_dict_copy_uint(parameters, hwid, key, "BoardID");
+            plist_dict_copy_uint(parameters, hwid, key, "BoardID");
 
             snprintf(key, 64, "Timer,ECID,%u", tag);
-            _plist_dict_copy_uint(parameters, hwid, key, "ECID");
+            plist_dict_copy_uint(parameters, hwid, key, "ECID");
 
             snprintf(key, 64, "Timer,Nonce,%u", tag);
-            _plist_dict_copy_data(parameters, hwid, key, "Nonce");
+            plist_dict_copy_data(parameters, hwid, key, "Nonce");
 
             snprintf(key, 64, "Timer,SecurityMode,%u", tag);
-            _plist_dict_copy_bool(parameters, hwid, key, "SecurityMode");
+            plist_dict_copy_bool(parameters, hwid, key, "SecurityMode");
 
             snprintf(key, 64, "Timer,SecurityDomain,%u", tag);
-            _plist_dict_copy_uint(parameters, hwid, key, "SecurityDomain");
+            plist_dict_copy_uint(parameters, hwid, key, "SecurityDomain");
 
             snprintf(key, 64, "Timer,ProductionMode,%u", tag);
-            _plist_dict_copy_uint(parameters, hwid, key, "ProductionStatus");
+            plist_dict_copy_uint(parameters, hwid, key, "ProductionStatus");
         }
         ap_info = plist_dict_get_item(p_info, "APInfo");
         if (!ap_info) {
@@ -3872,7 +3874,7 @@ static plist_t restore_get_timer_firmware_data(struct idevicerestore_client_t* c
     if(latestManifest == 1) {
         tmp_identity = plist_copy(client->sepBuildIdentity);
     } else {
-        tmp_identity = plist_copy(build_identity);
+        tmp_identity = plist_copy(client->restore->build_identity);
     }
 	if (build_identity_has_component(tmp_identity, comp_name)) {
 		if (build_identity_get_component_path(tmp_identity, comp_name, &comp_path) < 0) {
@@ -3969,7 +3971,7 @@ static plist_t restore_get_timer_firmware_data(struct idevicerestore_client_t* c
 	return response;
 }
 
-static plist_t restore_get_cryptex1_firmware_data(struct idevicerestore_client_t* client, plist_t p_info, plist_t arguments)
+static plist_t restore_get_cryptex1_firmware_data(struct idevicerestore_client_t* client, plist_t p_info, plist_t arguments, plist_t identity)
 {
 	plist_t parameters = NULL;
 	plist_t request = NULL;
@@ -3979,6 +3981,8 @@ static plist_t restore_get_cryptex1_firmware_data(struct idevicerestore_client_t
 		error("ERROR: %s: idevicerestore client not initialized?!\n", __func__);
 		return NULL;
 	}
+
+        plist_t tmp_identity = identity ? identity : client->restore->build_identity;
 
 	plist_t p_updater_name = plist_dict_get_item(arguments, "MessageArgUpdaterName");
 	const char* s_updater_name = plist_get_string_ptr(p_updater_name, NULL);
@@ -4011,7 +4015,7 @@ static plist_t restore_get_cryptex1_firmware_data(struct idevicerestore_client_t
 		for (i = 0; i < plist_array_get_size(build_identity_tags); i++) {
 			plist_t node = plist_array_get_item(build_identity_tags, i);
 			const char* key = plist_get_string_ptr(node, NULL);
-			plist_t item = plist_dict_get_item(client->restore->build_identity, key);
+			plist_t item = plist_dict_get_item(tmp_identity, key);
 			if (item) {
 				plist_dict_set_item(parameters, key, plist_copy(item));
 			}
@@ -4303,14 +4307,14 @@ static int restore_send_firmware_updater_data(struct idevicerestore_client_t* cl
 			goto error_out;
 		}
 	} else if ((strcmp(s_updater_name, "Cryptex1") == 0) || (strcmp(s_updater_name, "Cryptex1LocalPolicy") == 0)) {
-		fwdict = restore_get_cryptex1_firmware_data(client, p_info, arguments);
+		fwdict = restore_get_cryptex1_firmware_data(client, p_info, arguments, NULL);
 		if (fwdict == NULL) {
             info("Warning: %s: Couldn't get %s firmware data using current build_identity, trying again using latest build manifest\n", __func__, s_updater_name);
             if(!client->sepBuildIdentity) {
                 error("ERROR: %s: Couldn't get %s firmware data because latest build manifest is somehow unknown, this is not normal, RIPERONI :(\n", __func__, s_updater_name);
                 goto error_out;
             }
-            fwdict = restore_get_cryptex1_firmware_data(restore, client, client->sepBuildIdentity, p_info, arguments);
+            fwdict = restore_get_cryptex1_firmware_data(client, p_info, arguments, client->sepBuildIdentity);
             if (fwdict == NULL) {
                 error("ERROR: %s: Couldn't get %s firmware data a second time even using latest build manifest, this is not normal, RIPERONI :(\n", __func__, s_updater_name);
                 goto error_out;
@@ -4902,9 +4906,22 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
 	uint64_t fsize = 0;
 	ipsw_get_file_size(client->ipsw, path, &fsize);
 
+        restore_service_client_t service = _restore_get_service_client_for_data_request(client, message);
+        if (!service) {
+          error("ERROR: %s: Unable to connect to service client\n", __func__);
+          return -1;
+        }
+
+        info("Sending %s now (%" PRIu64 " bytes)...\n", component, (uint64_t)size);
+
+        struct _restore_send_file_data_ctx rctx;
+        rctx.client = client;
+        rctx.service = service;
+        rctx.last_progress = 0;
+
     if(!strcmp(component, "Cryptex1,SystemOS")) {
         if (!client->cryptex1sysosdatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
                 free(path);
                 error("ERROR: Failed to send component %s\n", component);
                 return -1;
@@ -4913,7 +4930,7 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
             int64_t i = client->cryptex1sysosdatasize;
             while (i > 0) {
                 int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(restore, (client->cryptex1sysosdata + client->cryptex1sysosdatasize - i), blob_size) < 0) {
+                if (_restore_send_file_data(&rctx, (client->cryptex1sysosdata + client->cryptex1sysosdatasize - i), blob_size, client->cryptex1sysosdatasize - i, client->cryptex1sysosdatasize) < 0) {
                     free(client->cryptex1sysosdata);
                     error("ERROR: Unable to send component %s data\n", component);
                     return -1;
@@ -4921,11 +4938,11 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
                 i -= blob_size;
             }
             free(client->cryptex1sysosdata);
-            _restore_send_file_data(restore, NULL, 0);
+            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1sysosdatasize - i, client->cryptex1sysosdatasize);
         }
     } else if(!strcmp(component, "Cryptex1,SystemVolume")) {
         if (!client->cryptex1sysvoldatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
                 free(path);
                 error("ERROR: Failed to send component %s\n", component);
                 return -1;
@@ -4934,7 +4951,7 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
             int64_t i = client->cryptex1sysvoldatasize;
             while (i > 0) {
                 int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(restore, (client->cryptex1sysvoldata + client->cryptex1sysvoldatasize - i), blob_size) < 0) {
+                if (_restore_send_file_data(&rctx, (client->cryptex1sysvoldata + client->cryptex1sysvoldatasize - i), blob_size, client->cryptex1sysvoldatasize - i, client->cryptex1sysvoldatasize) < 0) {
                     free(client->cryptex1sysvoldata);
                     error("ERROR: Unable to send component %s data\n", component);
                     return -1;
@@ -4942,11 +4959,11 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
                 i -= blob_size;
             }
             free(client->cryptex1sysvoldata);
-            _restore_send_file_data(restore, NULL, 0);
+            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1sysvoldatasize - i, client->cryptex1sysvoldatasize);
         }
     } else if(!strcmp(component, "Cryptex1,SystemTrustCache")) {
         if (!client->cryptex1systcdatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
                 free(path);
                 error("ERROR: Failed to send component %s\n", component);
                 return -1;
@@ -4955,7 +4972,7 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
             int64_t i = client->cryptex1systcdatasize;
             while (i > 0) {
                 int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(restore, (client->cryptex1systcdata + client->cryptex1systcdatasize - i), blob_size) < 0) {
+                if (_restore_send_file_data(&rctx, (client->cryptex1systcdata + client->cryptex1systcdatasize - i), blob_size, client->cryptex1systcdatasize - i, client->cryptex1systcdatasize) < 0) {
                     free(client->cryptex1systcdata);
                     error("ERROR: Unable to send component %s data\n", component);
                     return -1;
@@ -4963,11 +4980,11 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
                 i -= blob_size;
             }
             free(client->cryptex1systcdata);
-            _restore_send_file_data(restore, NULL, 0);
+            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1systcdatasize - i, client->cryptex1systcdatasize);
         }
     } else if(!strcmp(component, "Cryptex1,AppOS")) {
         if (!client->cryptex1apposdatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
                 free(path);
                 error("ERROR: Failed to send component %s\n", component);
                 return -1;
@@ -4976,7 +4993,7 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
             int64_t i = client->cryptex1apposdatasize;
             while (i > 0) {
                 int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(restore, (client->cryptex1apposdata + client->cryptex1apposdatasize - i), blob_size) < 0) {
+                if (_restore_send_file_data(&rctx, (client->cryptex1apposdata + client->cryptex1apposdatasize - i), blob_size, client->cryptex1apposdatasize - i, client->cryptex1apposdatasize) < 0) {
                     free(client->cryptex1apposdata);
                     error("ERROR: Unable to send component %s data\n", component);
                     return -1;
@@ -4984,11 +5001,11 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
                 i -= blob_size;
             }
             free(client->cryptex1apposdata);
-            _restore_send_file_data(restore, NULL, 0);
+            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1apposdatasize - i, client->cryptex1apposdatasize);
         }
     } else if(!strcmp(component, "Cryptex1,AppVolume")) {
         if (!client->cryptex1appvoldatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
                 free(path);
                 error("ERROR: Failed to send component %s\n", component);
                 return -1;
@@ -4997,7 +5014,7 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
             int64_t i = client->cryptex1appvoldatasize;
             while (i > 0) {
                 int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(restore, (client->cryptex1appvoldata + client->cryptex1appvoldatasize - i), blob_size) < 0) {
+                if (_restore_send_file_data(&rctx, (client->cryptex1appvoldata + client->cryptex1appvoldatasize - i), blob_size, client->cryptex1appvoldatasize - i, client->cryptex1appvoldatasize) < 0) {
                     free(client->cryptex1appvoldata);
                     error("ERROR: Unable to send component %s data\n", component);
                     return -1;
@@ -5005,11 +5022,11 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
                 i -= blob_size;
             }
             free(client->cryptex1appvoldata);
-            _restore_send_file_data(restore, NULL, 0);
+            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1appvoldatasize - i, client->cryptex1appvoldatasize);
         }
     } else if(!strcmp(component, "Cryptex1,AppTrustCache")) {
         if (!client->cryptex1apptcdatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
                 free(path);
                 error("ERROR: Failed to send component %s\n", component);
                 return -1;
@@ -5018,7 +5035,7 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
             int64_t i = client->cryptex1apptcdatasize;
             while (i > 0) {
                 int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(restore, (client->cryptex1apptcdata + client->cryptex1apptcdatasize - i), blob_size) < 0) {
+                if (_restore_send_file_data(&rctx, (client->cryptex1apptcdata + client->cryptex1apptcdatasize - i), blob_size, client->cryptex1apptcdatasize - i, client->cryptex1apptcdatasize) < 0) {
                     free(client->cryptex1apptcdata);
                     error("ERROR: Unable to send component %s data\n", component);
                     return -1;
@@ -5026,10 +5043,10 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
                 i -= blob_size;
             }
             free(client->cryptex1apptcdata);
-            _restore_send_file_data(restore, NULL, 0);
+            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1apptcdatasize - i, client->cryptex1apptcdatasize);
         }
     } else {
-        if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, restore) < 0) {
+        if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
             free(path);
             error("ERROR: Failed to send component %s\n", component);
             return -1;
@@ -5119,9 +5136,9 @@ int restore_send_buildidentity(struct idevicerestore_client_t* client, plist_t m
         plist_t build_identity_manifest = plist_dict_get_item(build_identity, "Manifest");
         plist_t build_identity_info = plist_dict_get_item(build_identity, "Info");
 
-        _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,Version", NULL);
-        _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,PreauthorizationVersion", NULL);
-        _plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,FakeRoot", NULL);
+        plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,Version", NULL);
+        plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,PreauthorizationVersion", NULL);
+        plist_dict_copy_item(build_identity, client->sepBuildIdentity, "Cryptex1,FakeRoot", NULL);
 
         plist_dict_remove_item(build_identity_info, "Cryptex1,AppOSSize");
         plist_dict_remove_item(build_identity_info, "Cryptex1,SystemOSSize");
@@ -5136,24 +5153,24 @@ int restore_send_buildidentity(struct idevicerestore_client_t* client, plist_t m
         plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainVolume");
         plist_dict_remove_item(build_identity_manifest, "Cryptex1,MobileAssetBrainTrustCache");
 
-        _plist_dict_copy_item(build_identity_info, sep_info, "Cryptex1,AppOSSize", NULL);
-        _plist_dict_copy_item(build_identity_info, sep_info, "Cryptex1,SystemOSSize", NULL);
+        plist_dict_copy_item(build_identity_info, sep_info, "Cryptex1,AppOSSize", NULL);
+        plist_dict_copy_item(build_identity_info, sep_info, "Cryptex1,SystemOSSize", NULL);
 
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemOS", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemVolume", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemTrustCache", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppOS", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppVolume", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppTrustCache", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainOS", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainVolume", NULL);
-        _plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainTrustCache", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemOS", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemVolume", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,SystemTrustCache", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppOS", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppVolume", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,AppTrustCache", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainOS", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainVolume", NULL);
+        plist_dict_copy_item(build_identity_manifest, sep_manifest, "Cryptex1,MobileAssetBrainTrustCache", NULL);
         debug("build_identity:\n");
         debug_plist(build_identity);
 
         plist_dict_set_item(dict, "BuildIdentityDict", plist_copy(build_identity));
 
-	plist_t node = plist_access_path(msg, 2, "Arguments", "Variant");
+	plist_t node = plist_access_path(message, 2, "Arguments", "Variant");
 	if(node) {
 		plist_dict_set_item(dict, "Variant", plist_copy(node));
 	} else {
@@ -5516,7 +5533,12 @@ debug("%s: type = %s\n", __func__, type);
 
         // send BasebandData
 		else if (!strcmp(type, "BasebandData")) {
-            if(restore_send_baseband_data(restore, client, (client->basebandBuildIdentity) ? client->basebandBuildIdentity : build_identity, message) < 0) {
+                  restore_service_client_t service = _restore_get_service_client_for_data_request(client, message);
+                  if (!service) {
+                    error("ERROR: %s: Unable to connect to service client\n", __func__);
+                    return -1;
+                  }
+            if(restore_send_baseband_data(client, message, client->basebandBuildIdentity ? client->basebandBuildIdentity : NULL) < 0) {
 				error("ERROR: Unable to send baseband data\n");
 				return -1;
 			}
@@ -6121,7 +6143,6 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
 				sval = NULL;
 			}
 		}
-	}
 	// FIXME: not required for iOS 5?
  // plist_dict_set_item(opts, "UserLocale", plist_new_string("en_US"));
 	/* this is mandatory on iOS 7+ to allow restore from normal mode */

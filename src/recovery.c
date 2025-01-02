@@ -102,36 +102,6 @@ int recovery_client_new(struct idevicerestore_client_t* client)
 	return 0;
 }
 
-
-int recovery_check_mode(struct idevicerestore_client_t* client) {
-	irecv_client_t recovery = NULL;
-	irecv_error_t recovery_error = IRECV_E_SUCCESS;
-	int mode = 0;
-
-	if (client->udid && client->ecid == 0) {
-		/* if we have a UDID but no ECID we can't make sure this is the correct device */
-		return -1;
-	}
-
-	irecv_init();
-	recovery_error=irecv_open_with_ecid(&recovery, client->ecid);
-
-	if (recovery_error != IRECV_E_SUCCESS) {
-		return -1;
-	}
-
-	irecv_get_mode(recovery, &mode);
-
-	if ((mode == IRECV_K_DFU_MODE) || (mode == IRECV_K_WTF_MODE)) {
-		irecv_close(recovery);
-		return -1;
-	}
-
-	irecv_close(recovery);
-	recovery = NULL;
-	return 0;
-}
-
 int recovery_set_autoboot(struct idevicerestore_client_t* client, int enable) {
 	irecv_error_t recovery_error = IRECV_E_SUCCESS;
 
@@ -359,7 +329,7 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
         }
 
         free(path);
-        ret = personalize_component(component, component_data, component_size, client->tss, &data, &size);
+        ret = personalize_component(client, component, component_data, component_size, client->tss, &data, &size);
         free(component_data);
         if (ret < 0) {
             error("ERROR: Unable to get personalized component: %s\n", component);

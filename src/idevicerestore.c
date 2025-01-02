@@ -1515,8 +1515,6 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
 			plist_free(client->tss);
             if ((client->flags & FLAG_OTAMANIFEST ? get_tss_response(client, build_identity2, &client->tss) : get_tss_response(client, build_identity, &client->tss)) < 0) {
                 error("ERROR: Unable to get SHSH blobs for this device\n");
-                if (delete_fs && filesystem)
-                    unlink(filesystem);
                 return -1;
             }
 
@@ -2019,14 +2017,7 @@ int check_mode(struct idevicerestore_client_t* client) {
 	int mode = _MODE_UNKNOWN;
 	int dfumode = _MODE_UNKNOWN;
 
-	if (recovery_check_mode(client) == 0) {
-		mode = _MODE_RECOVERY;
-	}
-
-	else if (dfu_check_mode(client, &dfumode) == 0) {
-		mode = dfumode;
-	}
-	else if (normal_check_mode(client) == 0) {
+	if (normal_check_mode(client) == 0) {
 		mode = _MODE_NORMAL;
 	}
 	else if (restore_check_mode(client) == 0) {
