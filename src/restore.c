@@ -4911,147 +4911,153 @@ int restore_send_source_boot_object_v4(struct idevicerestore_client_t* client, p
           error("ERROR: %s: Unable to connect to service client\n", __func__);
           return -1;
         }
-
-        info("Sending %s now (%" PRIu64 " bytes)...\n", component, (uint64_t)size);
+        const char *disable_latest = getenv("IDR_DISABLE_LATEST_CRYPTEX");
+        if(disable_latest) {
+          uint64_t fsize = 0;
+          ipsw_get_file_size(client->ipsw, path, &fsize);
+          info("Sending %s now (%" PRIu64 " bytes)...\n", component, (uint64_t)fsize);
+        } else {
+          info("Sending %s now...\n", component);
+        }
 
         struct _restore_send_file_data_ctx rctx;
         rctx.client = client;
         rctx.service = service;
         rctx.last_progress = 0;
 
-    if(!strcmp(component, "Cryptex1,SystemOS")) {
-        if (!client->cryptex1sysosdatasize) {
+        if(!strcmp(component, "Cryptex1,SystemOS")) {
+            if (!client->cryptex1sysosdatasize) {
+                if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
+                    free(path);
+                    error("ERROR: Failed to send component %s\n", component);
+                    return -1;
+                }
+            } else {
+                int64_t i = client->cryptex1sysosdatasize;
+                while (i > 0) {
+                    int blob_size = i > 8192 ? 8192 : i;
+                    if (_restore_send_file_data(&rctx, (client->cryptex1sysosdata + client->cryptex1sysosdatasize - i), blob_size, client->cryptex1sysosdatasize - i, client->cryptex1sysosdatasize) < 0) {
+                        free(client->cryptex1sysosdata);
+                        error("ERROR: Unable to send component %s data\n", component);
+                        return -1;
+                    }
+                    i -= blob_size;
+                }
+                free(client->cryptex1sysosdata);
+                _restore_send_file_data(&rctx, NULL, 0, client->cryptex1sysosdatasize - i, client->cryptex1sysosdatasize);
+            }
+        } else if(!strcmp(component, "Cryptex1,SystemVolume")) {
+            if (!client->cryptex1sysvoldatasize) {
+                if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
+                    free(path);
+                    error("ERROR: Failed to send component %s\n", component);
+                    return -1;
+                }
+            } else {
+                int64_t i = client->cryptex1sysvoldatasize;
+                while (i > 0) {
+                    int blob_size = i > 8192 ? 8192 : i;
+                    if (_restore_send_file_data(&rctx, (client->cryptex1sysvoldata + client->cryptex1sysvoldatasize - i), blob_size, client->cryptex1sysvoldatasize - i, client->cryptex1sysvoldatasize) < 0) {
+                        free(client->cryptex1sysvoldata);
+                        error("ERROR: Unable to send component %s data\n", component);
+                        return -1;
+                    }
+                    i -= blob_size;
+                }
+                free(client->cryptex1sysvoldata);
+                _restore_send_file_data(&rctx, NULL, 0, client->cryptex1sysvoldatasize - i, client->cryptex1sysvoldatasize);
+            }
+        } else if(!strcmp(component, "Cryptex1,SystemTrustCache")) {
+            if (!client->cryptex1systcdatasize) {
+                if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
+                    free(path);
+                    error("ERROR: Failed to send component %s\n", component);
+                    return -1;
+                }
+            } else {
+                int64_t i = client->cryptex1systcdatasize;
+                while (i > 0) {
+                    int blob_size = i > 8192 ? 8192 : i;
+                    if (_restore_send_file_data(&rctx, (client->cryptex1systcdata + client->cryptex1systcdatasize - i), blob_size, client->cryptex1systcdatasize - i, client->cryptex1systcdatasize) < 0) {
+                        free(client->cryptex1systcdata);
+                        error("ERROR: Unable to send component %s data\n", component);
+                        return -1;
+                    }
+                    i -= blob_size;
+                }
+                free(client->cryptex1systcdata);
+                _restore_send_file_data(&rctx, NULL, 0, client->cryptex1systcdatasize - i, client->cryptex1systcdatasize);
+            }
+        } else if(!strcmp(component, "Cryptex1,AppOS")) {
+            if (!client->cryptex1apposdatasize) {
+                if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
+                    free(path);
+                    error("ERROR: Failed to send component %s\n", component);
+                    return -1;
+                }
+            } else {
+                int64_t i = client->cryptex1apposdatasize;
+                while (i > 0) {
+                    int blob_size = i > 8192 ? 8192 : i;
+                    if (_restore_send_file_data(&rctx, (client->cryptex1apposdata + client->cryptex1apposdatasize - i), blob_size, client->cryptex1apposdatasize - i, client->cryptex1apposdatasize) < 0) {
+                        free(client->cryptex1apposdata);
+                        error("ERROR: Unable to send component %s data\n", component);
+                        return -1;
+                    }
+                    i -= blob_size;
+                }
+                free(client->cryptex1apposdata);
+                _restore_send_file_data(&rctx, NULL, 0, client->cryptex1apposdatasize - i, client->cryptex1apposdatasize);
+            }
+        } else if(!strcmp(component, "Cryptex1,AppVolume")) {
+            if (!client->cryptex1appvoldatasize) {
+                if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
+                    free(path);
+                    error("ERROR: Failed to send component %s\n", component);
+                    return -1;
+                }
+            } else {
+                int64_t i = client->cryptex1appvoldatasize;
+                while (i > 0) {
+                    int blob_size = i > 8192 ? 8192 : i;
+                    if (_restore_send_file_data(&rctx, (client->cryptex1appvoldata + client->cryptex1appvoldatasize - i), blob_size, client->cryptex1appvoldatasize - i, client->cryptex1appvoldatasize) < 0) {
+                        free(client->cryptex1appvoldata);
+                        error("ERROR: Unable to send component %s data\n", component);
+                        return -1;
+                    }
+                    i -= blob_size;
+                }
+                free(client->cryptex1appvoldata);
+                _restore_send_file_data(&rctx, NULL, 0, client->cryptex1appvoldatasize - i, client->cryptex1appvoldatasize);
+            }
+        } else if(!strcmp(component, "Cryptex1,AppTrustCache")) {
+            if (!client->cryptex1apptcdatasize) {
+                if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
+                    free(path);
+                    error("ERROR: Failed to send component %s\n", component);
+                    return -1;
+                }
+            } else {
+                int64_t i = client->cryptex1apptcdatasize;
+                while (i > 0) {
+                    int blob_size = i > 8192 ? 8192 : i;
+                    if (_restore_send_file_data(&rctx, (client->cryptex1apptcdata + client->cryptex1apptcdatasize - i), blob_size, client->cryptex1apptcdatasize - i, client->cryptex1apptcdatasize) < 0) {
+                        free(client->cryptex1apptcdata);
+                        error("ERROR: Unable to send component %s data\n", component);
+                        return -1;
+                    }
+                    i -= blob_size;
+                }
+                free(client->cryptex1apptcdata);
+                _restore_send_file_data(&rctx, NULL, 0, client->cryptex1apptcdatasize - i, client->cryptex1apptcdatasize);
+            }
+        } else {
             if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
                 free(path);
                 error("ERROR: Failed to send component %s\n", component);
                 return -1;
             }
-        } else {
-            int64_t i = client->cryptex1sysosdatasize;
-            while (i > 0) {
-                int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(&rctx, (client->cryptex1sysosdata + client->cryptex1sysosdatasize - i), blob_size, client->cryptex1sysosdatasize - i, client->cryptex1sysosdatasize) < 0) {
-                    free(client->cryptex1sysosdata);
-                    error("ERROR: Unable to send component %s data\n", component);
-                    return -1;
-                }
-                i -= blob_size;
-            }
-            free(client->cryptex1sysosdata);
-            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1sysosdatasize - i, client->cryptex1sysosdatasize);
         }
-    } else if(!strcmp(component, "Cryptex1,SystemVolume")) {
-        if (!client->cryptex1sysvoldatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
-                free(path);
-                error("ERROR: Failed to send component %s\n", component);
-                return -1;
-            }
-        } else {
-            int64_t i = client->cryptex1sysvoldatasize;
-            while (i > 0) {
-                int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(&rctx, (client->cryptex1sysvoldata + client->cryptex1sysvoldatasize - i), blob_size, client->cryptex1sysvoldatasize - i, client->cryptex1sysvoldatasize) < 0) {
-                    free(client->cryptex1sysvoldata);
-                    error("ERROR: Unable to send component %s data\n", component);
-                    return -1;
-                }
-                i -= blob_size;
-            }
-            free(client->cryptex1sysvoldata);
-            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1sysvoldatasize - i, client->cryptex1sysvoldatasize);
-        }
-    } else if(!strcmp(component, "Cryptex1,SystemTrustCache")) {
-        if (!client->cryptex1systcdatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
-                free(path);
-                error("ERROR: Failed to send component %s\n", component);
-                return -1;
-            }
-        } else {
-            int64_t i = client->cryptex1systcdatasize;
-            while (i > 0) {
-                int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(&rctx, (client->cryptex1systcdata + client->cryptex1systcdatasize - i), blob_size, client->cryptex1systcdatasize - i, client->cryptex1systcdatasize) < 0) {
-                    free(client->cryptex1systcdata);
-                    error("ERROR: Unable to send component %s data\n", component);
-                    return -1;
-                }
-                i -= blob_size;
-            }
-            free(client->cryptex1systcdata);
-            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1systcdatasize - i, client->cryptex1systcdatasize);
-        }
-    } else if(!strcmp(component, "Cryptex1,AppOS")) {
-        if (!client->cryptex1apposdatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
-                free(path);
-                error("ERROR: Failed to send component %s\n", component);
-                return -1;
-            }
-        } else {
-            int64_t i = client->cryptex1apposdatasize;
-            while (i > 0) {
-                int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(&rctx, (client->cryptex1apposdata + client->cryptex1apposdatasize - i), blob_size, client->cryptex1apposdatasize - i, client->cryptex1apposdatasize) < 0) {
-                    free(client->cryptex1apposdata);
-                    error("ERROR: Unable to send component %s data\n", component);
-                    return -1;
-                }
-                i -= blob_size;
-            }
-            free(client->cryptex1apposdata);
-            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1apposdatasize - i, client->cryptex1apposdatasize);
-        }
-    } else if(!strcmp(component, "Cryptex1,AppVolume")) {
-        if (!client->cryptex1appvoldatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
-                free(path);
-                error("ERROR: Failed to send component %s\n", component);
-                return -1;
-            }
-        } else {
-            int64_t i = client->cryptex1appvoldatasize;
-            while (i > 0) {
-                int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(&rctx, (client->cryptex1appvoldata + client->cryptex1appvoldatasize - i), blob_size, client->cryptex1appvoldatasize - i, client->cryptex1appvoldatasize) < 0) {
-                    free(client->cryptex1appvoldata);
-                    error("ERROR: Unable to send component %s data\n", component);
-                    return -1;
-                }
-                i -= blob_size;
-            }
-            free(client->cryptex1appvoldata);
-            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1appvoldatasize - i, client->cryptex1appvoldatasize);
-        }
-    } else if(!strcmp(component, "Cryptex1,AppTrustCache")) {
-        if (!client->cryptex1apptcdatasize) {
-            if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
-                free(path);
-                error("ERROR: Failed to send component %s\n", component);
-                return -1;
-            }
-        } else {
-            int64_t i = client->cryptex1apptcdatasize;
-            while (i > 0) {
-                int blob_size = i > 8192 ? 8192 : i;
-                if (_restore_send_file_data(&rctx, (client->cryptex1apptcdata + client->cryptex1apptcdatasize - i), blob_size, client->cryptex1apptcdatasize - i, client->cryptex1apptcdatasize) < 0) {
-                    free(client->cryptex1apptcdata);
-                    error("ERROR: Unable to send component %s data\n", component);
-                    return -1;
-                }
-                i -= blob_size;
-            }
-            free(client->cryptex1apptcdata);
-            _restore_send_file_data(&rctx, NULL, 0, client->cryptex1apptcdatasize - i, client->cryptex1apptcdatasize);
-        }
-    } else {
-        if (ipsw_extract_send(client->ipsw, path, 8192, (ipsw_send_cb) _restore_send_file_data, &rctx) < 0) {
-            free(path);
-            error("ERROR: Failed to send component %s\n", component);
-            return -1;
-        }
-    }
 	free(path);
 
 	_restore_service_free(service);

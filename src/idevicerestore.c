@@ -2382,7 +2382,12 @@ int get_tss_response(struct idevicerestore_client_t* client, plist_t build_ident
 	if (!plist_dict_get_item(parameters, "SepNonce")) {
 		unsigned char* sep_nonce = NULL;
 		unsigned int sep_nonce_size = 0;
-		get_sep_nonce(client, &sep_nonce, &sep_nonce_size);
+		if(!client->sepnonce || !client->sepnonce_size) {
+                  get_sep_nonce(client, &sep_nonce, &sep_nonce_size);
+                } else {
+                  sep_nonce = client->sepnonce;
+                  sep_nonce_size = client->sepnonce_size;
+                }
 		if (sep_nonce) {
 			plist_dict_set_item(parameters, "ApSepNonce", plist_new_data((const char*)sep_nonce, sep_nonce_size));
 			free(sep_nonce);
