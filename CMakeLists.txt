@@ -88,7 +88,8 @@ add_library(idevicerestore
 		src/fdr.c
 		src/limera1n.c
 		src/download.c
-		src/locking.c)
+		src/locking.c
+		src/ace3.c)
 target_include_directories(idevicerestore PRIVATE
 		"${CMAKE_SOURCE_DIR}/dep_root/include"
 		src)
