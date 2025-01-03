@@ -5116,20 +5116,20 @@ int restore_send_restore_local_policy(struct idevicerestore_client_t* client, pl
 
 int restore_send_buildidentity(struct idevicerestore_client_t* client, plist_t message)
 {
-	restored_error_t restore_error;
-	plist_t dict;
+        restored_error_t restore_error;
+        plist_t dict;
 
-	restore_service_client_t service = _restore_get_service_client_for_data_request(client, message);
-	if (!service) {
-		error("ERROR: %s: Unable to connect to service client\n", __func__);
-		return -1;
-	}
+        restore_service_client_t service = _restore_get_service_client_for_data_request(client, message);
+        if (!service) {
+                error("ERROR: %s: Unable to connect to service client\n", __func__);
+                return -1;
+        }
 
-	info("About to send BuildIdentity Dict...\n");
+        info("About to send BuildIdentity Dict...\n");
 
-	plist_t build_identity = restore_get_build_identity_from_request(client, message);
+        plist_t build_identity = restore_get_build_identity_from_request(client, message);
 
-    dict = plist_new_dict();
+        dict = plist_new_dict();
 
         plist_t sep_manifest = plist_copy(plist_dict_get_item(client->sepBuildIdentity, "Manifest"));
         plist_t sep_info = plist_copy(plist_dict_get_item(client->sepBuildIdentity, "Info"));
