@@ -1758,8 +1758,9 @@ int restore_send_nor(struct idevicerestore_client_t* client, plist_t message)
 	if (build_identity_has_component(client->restore->build_identity, "RestoreSEP") &&
 	    build_identity_get_component_path(client->restore->build_identity, "RestoreSEP", &restore_sep_path) == 0) {
 		component = "RestoreSEP";
-        if (!client->sepfwdatasize) ret = extract_component(client->ipsw, restore_sep_path, &component_data, &component_size);
-        else{
+        if (!client->sepfwdatasize) {
+          ret = extract_component(client->ipsw, restore_sep_path, &component_data, &component_size);
+        } else {
             component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
             memcpy(component_data, client->sepfwdata, component_size);
         }
@@ -1788,8 +1789,10 @@ int restore_send_nor(struct idevicerestore_client_t* client, plist_t message)
 	if (build_identity_has_component(client->restore->build_identity, "SEP") &&
 	    build_identity_get_component_path(client->restore->build_identity, "SEP", &sep_path) == 0) {
 		component = "SEP";
-        if (!client->sepfwdatasize) ret = extract_component(client->ipsw, sep_path, &component_data, &component_size);
-        else{
+        if (!client->sepfwdatasize) {
+          ret = extract_component(client->ipsw, sep_path,
+                                  &component_data, &component_size);
+        } else {
             component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
             memcpy(component_data, client->sepfwdata, component_size);
         }
@@ -2766,10 +2769,12 @@ static plist_t restore_get_se_firmware_data(struct idevicerestore_client_t* clie
 		return NULL;
 	}
 
-	if (latestManifest != 1 || !client->sefwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-	else{
-		component_data = malloc(component_size = (unsigned int)client->sefwdatasize);
-        ret = memcpy(component_data, client->sefwdata, component_size) == component_data ? 0 : -1;
+	if (latestManifest != 1 || !client->sefwdatasize) {
+          ret = extract_component(client->ipsw, comp_path, &component_data,
+                                  &component_size);
+        } else {
+	  component_data = malloc(component_size = (unsigned int)client->sefwdatasize);
+          ret = memcpy(component_data, client->sefwdata, component_size) == component_data ? 0 : -1;
 	}
 	free(comp_path);
 	comp_path = NULL;
@@ -2908,10 +2913,11 @@ static plist_t restore_get_savage_firmware_data(struct idevicerestore_client_t* 
 		return NULL;
 	}
 	extern int savage_num;
-	if (latestManifest != 1 || !client->savagefwdatasize[savage_num]) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-	else{
-		component_data = malloc(component_size = (unsigned int)client->savagefwdatasize[savage_num]);
-        ret = memcpy(component_data, client->savagefwdata[savage_num], component_size) == component_data ? 0 : -1;
+	if (latestManifest != 1 || !client->savagefwdatasize[savage_num]) {
+          ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+        } else {
+	  component_data = malloc(component_size = (unsigned int)client->savagefwdatasize[savage_num]);
+          ret = memcpy(component_data, client->savagefwdata[savage_num], component_size) == component_data ? 0 : -1;
 	}
 	free(comp_path);
 	comp_path = NULL;
@@ -3228,10 +3234,10 @@ static plist_t restore_get_rose_firmware_data(struct idevicerestore_client_t* cl
 		return NULL;
 	}
 	if (latestManifest != 1 || !client->rosefwdatasize) {
-        ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-    } else {
-		component_data = malloc(component_size = (unsigned int)client->rosefwdatasize);
-        ret = memcpy(component_data, client->rosefwdata, component_size) == component_data ? 0 : -1;
+          ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+        } else {
+          component_data = malloc(component_size = (unsigned int)client->rosefwdatasize);
+          ret = memcpy(component_data, client->rosefwdata, component_size) == component_data ? 0 : -1;
 	}
 	free(comp_path);
 	comp_path = NULL;
@@ -3261,10 +3267,11 @@ static plist_t restore_get_rose_firmware_data(struct idevicerestore_client_t* cl
 			error("ERROR: Unable to get path for '%s' component\n", comp_name);
 			return NULL;
 		}
-		if (latestManifest != 1 || !client->rosefwdatasize) ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-		else{
-			component_data = malloc(component_size = (unsigned int)client->rosefwdatasize);
-            ret = memcpy(component_data, client->rosefwdata, component_size) == component_data ? 0 : -1;
+		if (latestManifest != 1 || !client->rosefwdatasize) {
+                  ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+                } else{
+		  component_data = malloc(component_size = (unsigned int)client->rosefwdatasize);
+                  ret = memcpy(component_data, client->rosefwdata, component_size) == component_data ? 0 : -1;
 		}
 		free(comp_path);
 		comp_path = NULL;
@@ -3419,10 +3426,10 @@ static plist_t restore_get_veridian_firmware_data(struct idevicerestore_client_t
 
 	/* now get actual component data */
 	if (latestManifest != 1 || !client->veridianfwmfwdatasize) {
-        ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
-    } else{
-		component_data = malloc(component_size = (unsigned int)client->veridianfwmfwdatasize);
-		ret = memcpy(component_data, client->veridianfwmfwdata, component_size) == component_data ? 0 : -1;
+          ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+        } else {
+          component_data = malloc(component_size = (unsigned int)client->veridianfwmfwdatasize);
+          ret = memcpy(component_data, client->veridianfwmfwdata, component_size) == component_data ? 0 : -1;
 	}
 	free(comp_path);
 	comp_path = NULL;
@@ -3639,10 +3646,10 @@ static plist_t restore_get_tcon_firmware_data(struct idevicerestore_client_t* cl
 
 	/* now get actual component data */
     if (latestManifest != 1 || !client->baobabfwdatasize) {
-        ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+      ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
     } else {
-        component_data = malloc(component_size = (unsigned int)client->baobabfwdatasize);
-        ret = memcpy(component_data, client->baobabfwdata, component_size) == component_data ? 0 : -1;
+      component_data = malloc(component_size = (unsigned int)client->baobabfwdatasize);
+      ret = memcpy(component_data, client->baobabfwdata, component_size) == component_data ? 0 : -1;
     }
 	free(comp_path);
 	comp_path = NULL;
@@ -3882,10 +3889,10 @@ static plist_t restore_get_timer_firmware_data(struct idevicerestore_client_t* c
 			return NULL;
 		}
         if (latestManifest != 1 || !client->timerfwdatasize) {
-            ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
+          ret = extract_component(client->ipsw, comp_path, &component_data, &component_size);
         } else {
-            component_data = malloc(component_size = (unsigned int)client->timerfwdatasize);
-            ret = memcpy(component_data, client->timerfwdata, component_size) == component_data ? 0 : -1;
+          component_data = malloc(component_size = (unsigned int)client->timerfwdatasize);
+          ret = memcpy(component_data, client->timerfwdata, component_size) == component_data ? 0 : -1;
         }
 		free(comp_path);
 		comp_path = NULL;
