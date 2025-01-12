@@ -1758,12 +1758,12 @@ int restore_send_nor(struct idevicerestore_client_t* client, plist_t message)
 	if (build_identity_has_component(client->restore->build_identity, "RestoreSEP") &&
 	    build_identity_get_component_path(client->restore->build_identity, "RestoreSEP", &restore_sep_path) == 0) {
 		component = "RestoreSEP";
-        if (!client->sepfwdatasize) {
-          ret = extract_component(client->ipsw, restore_sep_path, &component_data, &component_size);
-        } else {
-            component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
-            memcpy(component_data, client->sepfwdata, component_size);
-        }
+          if (!client->sepfwdatasize) {
+            ret = extract_component(client->ipsw, restore_sep_path, &component_data, &component_size);
+          } else {
+              component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
+              memcpy(component_data, client->sepfwdata, component_size);
+          }
         
         free(restore_sep_path);
         if (ret < 0) {
@@ -1788,33 +1788,32 @@ int restore_send_nor(struct idevicerestore_client_t* client, plist_t message)
 
 	if (build_identity_has_component(client->restore->build_identity, "SEP") &&
 	    build_identity_get_component_path(client->restore->build_identity, "SEP", &sep_path) == 0) {
-		component = "SEP";
-        if (!client->sepfwdatasize) {
-          ret = extract_component(client->ipsw, sep_path,
-                                  &component_data, &component_size);
-        } else {
+          component = "SEP";
+          if (!client->sepfwdatasize) {
+            ret = extract_component(client->ipsw, sep_path, &component_data, &component_size);
+          } else {
             component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
             memcpy(component_data, client->sepfwdata, component_size);
-        }
-        free(sep_path);
-		if (ret < 0) {
-			error("ERROR: Unable to extract component: %s\n", component);
-			return -1;
-		}
+          }
+          free(sep_path);
+          if (ret < 0) {
+            error("ERROR: Unable to extract component: %s\n", component);
+            return -1;
+          }
 
-		ret = personalize_component(client, component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
-        free(component_data);
-		component_data = NULL;
-		component_size = 0;
-		if (ret < 0) {
-			error("ERROR: Unable to get personalized component: %s\n", component);
-			return -1;
-		}
+          ret = personalize_component(client, component, component_data, component_size, (client->septss) ? client->septss : client->tss, &personalized_data, &personalized_size);
+          free(component_data);
+          component_data = NULL;
+          component_size = 0;
+          if (ret < 0) {
+            error("ERROR: Unable to get personalized component: %s\n", component);
+            return -1;
+          }
 
-		plist_dict_set_item(dict, "SEPImageData", plist_new_data((char*)personalized_data, personalized_size));
-		free(personalized_data);
-		personalized_data = NULL;
-		personalized_size = 0;
+          plist_dict_set_item(dict, "SEPImageData", plist_new_data((char*)personalized_data, personalized_size));
+          free(personalized_data);
+          personalized_data = NULL;
+          personalized_size = 0;
 	}
 
 	if (build_identity_has_component(client->restore->build_identity, "SepStage1") &&

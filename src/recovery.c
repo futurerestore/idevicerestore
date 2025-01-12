@@ -333,6 +333,9 @@ int recovery_send_component(struct idevicerestore_client_t* client, plist_t buil
             client->kerneldatasize = NULL;
             client->kerneldata = NULL;
             info("1337 CUSTOM KERNEL!\n");
+        } else if(!strcmp(component, "RestoreSEP") && client->sepfwdatasize) {
+            component_data = malloc(component_size = (unsigned int)client->sepfwdatasize);
+            memcpy(component_data, client->sepfwdata, component_size);
         } else {
             ret = extract_component(client->ipsw, path, &component_data, &component_size);
             if (ret < 0) {
